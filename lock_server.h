@@ -24,7 +24,6 @@ class lock{
     int get_lock_id() {return this->lock_id;}
     int get_state() {return this->state;}
     int get_lock_waiting() {return this->lock_waiting;}
-    int get_lock(lock_protocol::lockid_t lid);
 
     void set_state_locked(){this->state = LOCKED;}
     void set_state_free(){this->state = FREE;}
