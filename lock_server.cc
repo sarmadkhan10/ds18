@@ -94,12 +94,12 @@ lock_protocol::status lock_server::acquire(lock_protocol::lockid_t lid, int &r)
     list_locks.push_back(new_lock);
 
     assert(pthread_mutex_unlock(&mutex_) == 0);
-
-    return lock_protocol::OK;
   }
+
+  return lock_protocol::OK;
 }
 
-lock_protocol::status lock::release(lock_protocol::lockid_t lid) {
+lock_protocol::status lock_server::release(lock_protocol::lockid_t lid, int &r) {
   assert(pthread_mutex_lock(&mutex_) == 0);
 
   lock *l = get_lock(lid);
@@ -116,7 +116,7 @@ lock_protocol::status lock::release(lock_protocol::lockid_t lid) {
     pthread_cond_broadcast(&lock_free);
   }
 
-  assert(pthread_mutex_unlock(&mutex_));
+  assert(pthread_mutex_unlock(&mutex_) == 0);
 
   return lock_protocol::OK;
 }
