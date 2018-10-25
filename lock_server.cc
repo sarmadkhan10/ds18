@@ -8,10 +8,10 @@
 
 using namespace std;
 
-pthread_mutex_t mutex_;
-pthread_cond_t lock_free;
+static pthread_mutex_t mutex_;
+static pthread_cond_t lock_free;
 
-vector<lock *> list_locks;
+static vector<lock *> list_locks;
 
 lock::lock():
   state(FREE), lock_waiting(0)
@@ -59,13 +59,12 @@ bool delete_lock(lock_protocol::lockid_t lid) {
 lock_server::lock_server():
   nacquire (0)
 {
-
-  pthread_mutex_init(&mutex_, 0);
-  pthread_cond_init(&lock_free, 0);
+  assert(pthread_mutex_init(&mutex_, NULL) == 0);
+  assert(pthread_cond_init(&lock_free, NULL) == 0);
 
 }
 
-lock_protocol::status lock::acquire(lock_protocol::lockid_t lid)
+lock_protocol::status lock_server::acquire(lock_protocol::lockid_t lid, int &r)
 {
   assert(pthread_mutex_lock(&mutex_) == 0);
 
@@ -109,8 +108,15 @@ lock_protocol::status lock::release(lock_protocol::lockid_t lid) {
 
   // if no thread is waiting for the lock, delete it
   if (l->get_lock_waiting() == 0) {
-
+    assert(delete_lock(lid) == true);
   }
+  else {
+    l->set_state_free();
+
+    pthread_cond_broadcast(&lock_free);
+  }
+
+  assert(pthread_mutex_unlock(&mutex_));
 
   return lock_protocol::OK;
 }

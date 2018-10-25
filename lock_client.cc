@@ -30,7 +30,10 @@ lock_client::stat(lock_protocol::lockid_t lid)
 lock_protocol::status
 lock_client::acquire(lock_protocol::lockid_t lid)
 {
-  return lock_protocol::RPCERR;
+  int r;
+  int ret = cl->call(lock_protocol::acquire, lid, r);
+  assert (ret == lock_protocol::OK);
+  return ret;
 }
 
 lock_protocol::status
@@ -38,4 +41,3 @@ lock_client::release(lock_protocol::lockid_t lid)
 {
   return lock_protocol::RPCERR;
 }
-
