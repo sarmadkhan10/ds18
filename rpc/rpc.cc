@@ -556,12 +556,32 @@ rpcs::dispatch(djob_t *j)
 	}
 	c->decref();
 }
-
 void
 rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
+
+  std::map<unsigned int, std::list<reply_t>> ::iterator clt; 
+	std::list<reply_t>::iterator it;
 	ScopedLock rwl(&reply_window_m_);
+  clt = reply_window_.find(clt_nonce);
+  assert(clt != reply_window_.end());
+
+	char *b_copy = (char *) malloc(sz);
+
+	for (it = clt->second.begin(); it != clt->second.end(); it++) {
+    if((*it).xid == xid){
+
+	    memcpy(b_copy, b, sz);
+
+    	(*it).buf = b_copy;
+    	(*it).sz = sz;
+    	(*it).cur_state = DONE;
+    }
+  }
+
+	// sort the list wrt to xid
+	//reply_window_[clt_nonce].sort(rep_compare);
 }
 
 void
@@ -584,9 +604,62 @@ rpcs::rpcstate_t
 rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
-	ScopedLock rwl(&reply_window_m_);
 
-	return NEW;
+  std::map<unsigned int, std::list<reply_t>> ::iterator clt; 
+	std::list<reply_t>::iterator it;
+  rpcstate_t state;
+  int min_xid = 999;
+
+	ScopedLock rwl(&reply_window_m_);
+  
+  clt = reply_window_.find(clt_nonce);
+  assert(clt != reply_window_.end());
+	for (it = clt->second.begin();it != clt->second.end() ; it++ )
+  {
+    if((*it).xid < min_xid)
+      min_xid = (*it).xid;
+    if((*it).xid == xid)
+      break;
+  }
+  if(min_xid == 999)
+    min_xid = 0;
+  if(it != clt->second.end()){
+    switch((*it).cur_state){
+      case DONE:
+        *b = (*it).buf;
+        *sz = (*it).sz;
+        state = DONE;
+        break;
+      case NEW:
+        state = INPROGRESS;
+        break;
+      case INPROGRESS:
+        state = INPROGRESS;
+        break;
+    }
+  }  else{
+      if(xid < min_xid) 
+        state = FORGOTTEN;
+      else{
+        reply_t new_req(xid);
+        //new_req.buf = (char*) malloc(sizeof(char) * 1024);
+        //new_req.sz = *sz;
+        new_req.cur_state = NEW;
+        state = NEW;
+        clt->second.insert(it,new_req);
+      }
+  }
+
+	for (it = clt->second.begin(); it != clt->second.end(); ) {
+    if((*it).xid <= xid_rep){
+      free((*it).buf);
+      it = (clt->second).erase(it);
+    }
+    else
+      ++it;
+	}
+  return state; 
+
 }
 
 //rpc handler
