@@ -585,9 +585,6 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
   }
 
 	assert(found == true);
-
-	// sort the list wrt to xid
-	//reply_window_[clt_nonce].sort(rep_compare);
 }
 
 void
@@ -613,7 +610,6 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
   std::map<unsigned int, std::list<reply_t>> ::iterator clt;
 	std::list<reply_t>::iterator it;
   rpcstate_t state;
-  unsigned int min_xid = 9999;
 
 	ScopedLock rwl(&reply_window_m_);
 
@@ -624,8 +620,6 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 	// if reply for a certain xid exists, break
 	for (it = clt->second.begin();it != clt->second.end() ; it++ )
   {
-    if((*it).xid < min_xid)
-      min_xid = (*it).xid;
     if((*it).xid == xid)
       break;
   }
@@ -651,20 +645,31 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
     }
   }
 	else {
-    if(xid < min_xid && !clt->second.empty())
+    if(xid < clt->second.front().xid)
       state = FORGOTTEN;
     else {
       reply_t new_req(xid);
       new_req.cur_state = NEW;
       state = NEW;
-      clt->second.push_back(new_req);
+
+			// insert (sorted)
+			for (it = clt->second.begin(); it != clt->second.end(); it++)
+		  {
+		    if((*it).xid > xid) {
+		      clt->second.insert(it, new_req);
+					break;
+				}
+		  }
+			if(it == clt->second.end()) {
+				clt->second.push_back(new_req);
+			}
     }
   }
 
 	//printf("before cleanup: %d\n", clt->second.size());
 	// cleanup
 	for (it = clt->second.begin(); it != clt->second.end(); ) {
-    if((*it).xid == xid_rep){
+    if((*it).xid <= xid_rep){
       free((*it).buf);
       it = clt->second.erase(it);
     }

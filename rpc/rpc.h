@@ -88,7 +88,6 @@ class rpcc : public chanmgr {
 
 		bool got_pdu(connection *c, char *b, int sz);
 
-
 		template<class R>
 			int call_m(unsigned int proc, marshall &req, R & r, TO to);
 
