@@ -252,12 +252,10 @@ class rpcs : public chanmgr {
 	struct reply_t {
 		reply_t (unsigned int _xid) {
 			xid = _xid;
-      cur_state = NEW;
 			cb_present = false;
 			buf = NULL;
 			sz = 0;
 		}
-    rpcstate_t cur_state;
 		unsigned int xid;
 		bool cb_present;
 		char *buf;

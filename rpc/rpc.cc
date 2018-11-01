@@ -560,9 +560,11 @@ void
 rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 		char *b, int sz)
 {
+	ScopedLock rwl(&reply_window_m_);
+
   std::map<unsigned int, std::list<reply_t>> ::iterator clt;
 	std::list<reply_t>::iterator it;
-	ScopedLock rwl(&reply_window_m_);
+
   clt = reply_window_.find(clt_nonce);
   assert(clt != reply_window_.end());
 
@@ -577,7 +579,7 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 
     	(*it).buf = b_copy;
     	(*it).sz = sz;
-    	(*it).cur_state = DONE;
+    	(*it).cb_present = true;
 
 			found = true;
 			break;
@@ -607,11 +609,11 @@ rpcs::rpcstate_t
 rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 		unsigned int xid_rep, char **b, int *sz)
 {
+	ScopedLock rwl(&reply_window_m_);
+
   std::map<unsigned int, std::list<reply_t>> ::iterator clt;
 	std::list<reply_t>::iterator it;
   rpcstate_t state;
-
-	ScopedLock rwl(&reply_window_m_);
 
   clt = reply_window_.find(clt_nonce);
 	// reply_window must have clt
@@ -626,30 +628,26 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 
 	// if reply for that xid was found
   if(it != clt->second.end()) {
-    switch((*it).cur_state) {
-      case DONE:
-        *b = (*it).buf;
-        *sz = (*it).sz;
-        state = DONE;
-        break;
-      case NEW:
-        state = INPROGRESS;
-        break;
-      case INPROGRESS:
-        state = INPROGRESS;
-        break;
-			case FORGOTTEN:
-				assert("FORGOTTEN: should not happen\n");
-			default:
-				break;
-    }
+    if((*it).cb_present) {
+      *b = (*it).buf;
+      *sz = (*it).sz;
+      state = DONE;
+		}
+		else {
+			state = INPROGRESS;
+		}
   }
 	else {
-    if(xid < clt->second.front().xid)
+		unsigned int min_xid = 99999;
+
+    if(!clt->second.empty())
+			min_xid = clt->second.front().xid;
+
+		if(xid < min_xid && min_xid != 99999) {
       state = FORGOTTEN;
+		}
     else {
       reply_t new_req(xid);
-      new_req.cur_state = NEW;
       state = NEW;
 
 			// insert (sorted)
@@ -660,23 +658,21 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
 					break;
 				}
 		  }
+
+			// insert at the end
 			if(it == clt->second.end()) {
 				clt->second.push_back(new_req);
 			}
     }
   }
 
-	//printf("before cleanup: %d\n", clt->second.size());
-	// cleanup
-	for (it = clt->second.begin(); it != clt->second.end(); ) {
-    if((*it).xid <= xid_rep){
-      free((*it).buf);
-      it = clt->second.erase(it);
-    }
-    else
-      ++it;
+	if(!clt->second.empty()) {
+		while(clt->second.front().xid <= xid_rep) {
+			free(clt->second.front().buf);
+			clt->second.pop_front();
+		}
 	}
-	//printf("after cleanup: %d\n", clt->second.size());
+
   return state;
 
 }
