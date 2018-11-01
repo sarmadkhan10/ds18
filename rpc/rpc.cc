@@ -570,14 +570,14 @@ rpcs::add_reply(unsigned int clt_nonce, unsigned int xid,
 
 	bool found = false;
 
-	char *b_copy = (char *) malloc(sz);
+	//char *b_copy = (char *) malloc(sz);
 
 	for (it = clt->second.begin(); it != clt->second.end(); it++) {
     if((*it).xid == xid) {
 
-	    memcpy(b_copy, b, sz);
+	    //memcpy(b_copy, b, sz);
 
-    	(*it).buf = b_copy;
+    	(*it).buf = b;
     	(*it).sz = sz;
     	(*it).cb_present = true;
 
@@ -667,9 +667,11 @@ rpcs::checkduplicate_and_update(unsigned int clt_nonce, unsigned int xid,
   }
 
 	if(!clt->second.empty()) {
-		while(clt->second.front().xid <= xid_rep) {
-			free(clt->second.front().buf);
-			clt->second.pop_front();
+		while(clt->second.front().xid < xid_rep) {
+			if(clt->second.front().cb_present) {
+				free(clt->second.front().buf);
+				clt->second.pop_front();
+			}
 		}
 	}
 
