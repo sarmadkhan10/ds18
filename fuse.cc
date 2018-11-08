@@ -125,7 +125,8 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
-  return yfs->createhelper(parent, name, e); 
+
+  return yfs->createhelper(parent, name); 
 }
 
 void
@@ -155,6 +156,8 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   struct fuse_entry_param e;
   bool found = false;
+  unsigned long long inum_;
+  int size_;
 
   e.attr_timeout = 0.0;
   e.entry_timeout = 0.0;
@@ -163,7 +166,9 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   // Look up the file named `name' in the directory referred to by
   // `parent' in YFS. If the file was found, initialize e.ino and
   // e.attr appropriately.
-  found = yfs->lookup(parent, name, &e);
+  found = yfs->lookup(parent, name, &inum_, &size_);
+  e->attr.st_ino = inum_;
+  e->attr.st_ino = size_;
 
   if (found)
     fuse_reply_entry(req, &e);
@@ -240,8 +245,13 @@ void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
- if(yfs->open_file(ino))
+  int inum_, direct_io_, keep_cache_;
+ if(yfs->open_file(ino, &inum_, &direct_io_, &keep_cache_)){
+  fi->fh = inum_;
+  fi->direct_io = direct_io_;
+  fi->keep_cache = keep_cache_;
   fuse_reply_open(ino, fi);
+ }
  else
   fuse_reply_err(req, ENOSYS);
 }

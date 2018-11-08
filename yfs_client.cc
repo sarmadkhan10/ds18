@@ -10,7 +10,8 @@
 #include <fcntl.h>
 #include <random>
 #include <string>
-#include <fuse_lowlevel.h>
+#include <sstream>
+//#include <fuse_lowlevel.h>
 
 using namespace std;
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
@@ -105,7 +106,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
  */
 
 int 
-yfs_client::lookup(unsigned long long parent, const char *name, struct fuse_entry_param *e)
+yfs_client::lookup(unsigned long long parent, const char *name, unsigned long long *inum_, int *size_)
 {
  string value, content;
  int loc;
@@ -113,7 +114,7 @@ yfs_client::lookup(unsigned long long parent, const char *name, struct fuse_entr
  
  if(ec->get(parent, value) != yfs_client::OK)
  {
-   e->attr.st_ino = 0;
+   *inum_ = 0;
    //to be set more based on test results
    return 0;
  }
@@ -125,13 +126,13 @@ yfs_client::lookup(unsigned long long parent, const char *name, struct fuse_entr
 
  loc = value.find(name, 0);
  if(loc != string::npos)
-   inum = strtok(&value[value.find(".", loc+1)+1], ";") ;
+   inum = stoi(strtok(&value[value.find(".", loc+1)+1], ";")) ;
  if(inum == 0)
    return 0;
- e->attr.st_ino = inum;
+  *inum_ = inum;
  ec->put(inum, content);
 
- e->attr.st_size = content.size(); 
+ *size_ = content.size(); 
  return 1;
 }
 /*
@@ -147,30 +148,33 @@ yfs_client::lookup(unsigned long long parent, const char *name, struct fuse_entr
  *@param fuse_entry_param entire attribute   
  */
 yfs_client::status
-yfs_client::create(unsigned long long parent, const char *name, struct fuse_entry_param *e)
+yfs_client::create(unsigned long long parent, const char *name)
 {
   string value;
-  unsigned long long inum_new;
   string temp;
-  extend_protocol::attr a;
+  unsigned long long inum_;
+  int  size; 
+  //extend_protocol::attr a;
+  ostringstream out;
 
   //check if file already present
-  if(lookup(parent, name, &e))
+  if(lookup(parent, name, &inum_, &size))
     return yfs_client::NOENT;
   
-  value = ec->get(parent);
+   ec->get(parent, value);
 
 //genereate a 64 bit random number and check if has 31st bit one (recognising a file)
   do{
     mt19937_64::result_type seed = time(0);
     mt19937_64 mt_rand(seed);
-    inum =  mt_rand();
-  } while(!isFile(inum));
+    inum_ =  mt_rand();
+  } while(!isfile(inum_));
 
 
-  sprintf(temp, "name.%llu;", inum);
-  value  += temp;
-  put(inum, str);
+  //sprintf(temp, "name.%llu;", inum);
+  out << "name." << inum_ <<";";
+  value  += out.str();
+  ec->put(inum_, value);
 
   return yfs_client::OK;
 //include based on test results
@@ -199,19 +203,18 @@ yfs_client::create(unsigned long long parent, const char *name, struct fuse_entr
  */
 bool
 yfs_client::open_file(unsigned long long ino,
-     struct fuse_file_info *fi)
+      int *inum_, int *direct_io_, int *keep_cache_)
 {
   string value;
-  extend_protocol::attr a;
 
-  value = ec->get(ino);
+  ec->get(ino, value);
   if(value.empty()){
-   fi->fh = NULL; 
+   //fi->fh = NULL; 
    return false;
   }
-  fi->fh = inum;
-  fi->direct_io = 0;
-  fi->keep_cache = 0;
+  *inum_ = ino;
+  *direct_io_ = 0;
+  *keep_cache_ = 0;
 
 //include based on test results
 #if 0 
