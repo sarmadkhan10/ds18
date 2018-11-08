@@ -44,6 +44,9 @@
 
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
+  yfs_client::status create(unsigned long long, const char*, struct fuse_entry_param*);
+  int lookup(unsigned long long, const char*, struct fuse_entry_param*);
+  bool open_file(unsigned long long, struct fuse_file_info*);
 };
 
 #endif 

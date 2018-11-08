@@ -125,8 +125,7 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
-  // You fill this in
-  return yfs_client::NOENT;
+  return yfs->createhelper(parent, name, e); 
 }
 
 void
@@ -164,6 +163,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   // Look up the file named `name' in the directory referred to by
   // `parent' in YFS. If the file was found, initialize e.ino and
   // e.attr appropriately.
+  found = yfs->lookup(parent, name, &e);
 
   if (found)
     fuse_reply_entry(req, &e);
@@ -216,9 +216,20 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
   memset(&b, 0, sizeof(b));
 
+  string value = get(ino);
+  istringstream iss(value);
+  string file_entry;
+  while (getline(iss, file_entry, ';'))
+  {
+    int l = file_entry.find(".");
+    string file_name = file_entry.substr(0, l);
 
-   // fill in the b data structure using dirbuf_add
+    fuse_ino_t inum_ = stoi(file_entry.substr(l+1));
 
+    //still not sure what to add in the structure, reorganize based on the test results
+    b.size = file_name.size();
+    dirbuf_add(&b, file_name, inum_)
+  }
 
    reply_buf_limited(req, b.p, b.size, off, size);
    free(b.p);
@@ -229,12 +240,10 @@ void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
-  // You fill this in
-#if 0
-  fuse_reply_open(req, fi);
-#else
+ if(yfs->open_file(ino))
+  fuse_reply_open(ino, fi);
+ else
   fuse_reply_err(req, ENOSYS);
-#endif
 }
 
 void
