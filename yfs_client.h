@@ -44,9 +44,11 @@
 
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
-  yfs_client::status create(unsigned long long, const char*);
+  yfs_client::status createhelper(unsigned long long, const char*);
   int lookup(unsigned long long, const char*, unsigned long long*, int*);
   bool open_file(unsigned long long, int*, int*, int*);
+  int get_(unsigned long long , std::string);
+  
 };
 
 #endif 

@@ -148,7 +148,7 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
  *@param fuse_entry_param entire attribute   
  */
 yfs_client::status
-yfs_client::create(unsigned long long parent, const char *name)
+yfs_client::createhelper(unsigned long long parent, const char *name)
 {
   string value;
   string temp;
@@ -231,4 +231,7 @@ yfs_client::open_file(unsigned long long ino,
 #endif
 
   return true;
+}
+int yfs_client::get_(unsigned long long inum_, string buf){
+ return ec->get(inum_, buf);
 }

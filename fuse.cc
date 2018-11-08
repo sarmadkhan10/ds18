@@ -16,7 +16,10 @@
 #include <unistd.h>
 #include <assert.h>
 #include <arpa/inet.h>
+//#include <string>
 #include "yfs_client.h"
+
+using namespace std;
 
 int myid;
 yfs_client *yfs;
@@ -167,8 +170,8 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   // `parent' in YFS. If the file was found, initialize e.ino and
   // e.attr appropriately.
   found = yfs->lookup(parent, name, &inum_, &size_);
-  e->attr.st_ino = inum_;
-  e->attr.st_ino = size_;
+  e.attr.st_ino = inum_;
+  e.attr.st_ino = size_;
 
   if (found)
     fuse_reply_entry(req, &e);
@@ -221,19 +224,24 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
   memset(&b, 0, sizeof(b));
 
-  string value = get(ino);
+
+  string value;
+  yfs->get_(ino, value);
   istringstream iss(value);
   string file_entry;
   while (getline(iss, file_entry, ';'))
   {
     int l = file_entry.find(".");
-    string file_name = file_entry.substr(0, l);
+    string file_name_;
+    char file_name[20];
+    file_name_ = file_entry.substr(0, l);
+    strcpy(file_name, file_name_.c_str());
 
     fuse_ino_t inum_ = stoi(file_entry.substr(l+1));
 
     //still not sure what to add in the structure, reorganize based on the test results
-    b.size = file_name.size();
-    dirbuf_add(&b, file_name, inum_)
+    b.size = strlen(file_name);
+    dirbuf_add(&b, file_name, inum_);
   }
 
    reply_buf_limited(req, b.p, b.size, off, size);
@@ -250,7 +258,7 @@ fuseserver_open(fuse_req_t req, fuse_ino_t ino,
   fi->fh = inum_;
   fi->direct_io = direct_io_;
   fi->keep_cache = keep_cache_;
-  fuse_reply_open(ino, fi);
+  fuse_reply_open(req, fi);
  }
  else
   fuse_reply_err(req, ENOSYS);
