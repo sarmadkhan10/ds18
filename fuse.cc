@@ -73,6 +73,7 @@ fuseserver_getattr(fuse_req_t req, fuse_ino_t ino,
     yfs_client::inum inum = ino; // req->in.h.nodeid;
     yfs_client::status ret;
 
+    printf("\n\nxxx");
     ret = getattr(inum, st);
     if(ret != yfs_client::OK){
       fuse_reply_err(req, ENOENT);
