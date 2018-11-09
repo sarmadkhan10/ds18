@@ -7,15 +7,19 @@
 //#include "yfs_protocol.h"
 #include "extent_client.h"
 #include <vector>
+#include "lock_protocol.h"
+#include "lock_client.h"
 
 
   class yfs_client {
   extent_client *ec;
  public:
+  lock_client *lc;
 
   typedef unsigned long long inum;
   enum xxstatus { OK, RPCERR, NOENT, IOERR, FBIG };
   typedef int status;
+  lock_protocol::lockid_t a = 1;
 
   struct fileinfo {
     unsigned long long size;

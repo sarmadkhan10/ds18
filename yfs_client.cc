@@ -12,12 +12,15 @@
 #include <string>
 #include <sstream>
 //#include <fuse_lowlevel.h>
+#include "lock_protocol.h"
+#include "lock_client.h"
 
 using namespace std;
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
   assert(pthread_mutex_init(&m_, 0) == 0);
+  lc = new lock_client(lock_dst);
 
 }
 
@@ -118,7 +121,8 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   printf("\nclient lookup enter ");
   std::cout << name << std::endl;
  
-  FSlock fs(&m_);
+  lc->acquire(inum);
+  //FSlock fs(&m_);
   printf("\nclient lookup lock acquired\n");
 
   // verify parent is a directory
@@ -146,6 +150,7 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   if(ec->getattr(inum, a) != yfs_client::OK) return false;
 
   *size_ = a.size;
+  lc->release(inum);
 
   return 1;
 }
@@ -230,6 +235,7 @@ yfs_client::open_file(unsigned long long ino,
 
   FILE *fp = fopen("debug.txt" , "w");
 
+  //lc->acquire(a);
   FSlock fs(&m_);
   ec->get(ino, value);
   //check if the file already present
