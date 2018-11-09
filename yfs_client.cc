@@ -112,18 +112,32 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
  string value, content;
  int loc;
  unsigned long long inum = 0;
+ ostringstream out;
+  unsigned long long inum_new;
  
  FSlock fs(&m_);
  if(ec->get(parent, value) != yfs_client::OK)
  {
-   *inum_ = 0;
+  do{
+    mt19937_64::result_type seed = time(0);
+    mt19937_64 mt_rand(seed);
+    inum_new =  mt_rand();
+  } while(!isfile(inum_new));
+
+
+  //sprintf(temp, "name.%llu;", inum);
+  out << "name." << inum_new <<";";
+  value  += out.str();
+  ec->put(inum_new, value);
+
+  return yfs_client::OK;
    //to be set more based on test results
-   return 0;
  }
 
  if(value.empty())
  {
-   return 0;
+
+   return yfs_client::OK;
  }
 
  loc = value.find(name, 0);
@@ -213,23 +227,23 @@ yfs_client::open_file(unsigned long long ino,
   ostringstream out;
   printf("\n on open file client");
 
+  FILE *fp = fopen("debug.txt" , "w");
+
   FSlock fs(&m_);
   ec->get(ino, value);
   //check if the file already present
   if(value.empty()){
-   //fi->fh = NULL; 
     do{
       mt19937_64::result_type seed = time(0);
       mt19937_64 mt_rand(seed);
       inum =  mt_rand();
-    } while(!isfile(inum));
+      fprintf(fp, "\nloop");
+    }
+    while(!isfile(inum));
 
-
-  //sprintf(temp, "name.%llu;", inum);
-   out << "name." << inum_ <<";";
-   value  += out.str();
-   ec->put(inum, value);
-
+    out << "name." << inum_ <<";";
+    value  += out.str();
+    ec->put(inum, value);
     return yfs_client::OK;
   }
   *inum_ = ino;

@@ -73,7 +73,6 @@ fuseserver_getattr(fuse_req_t req, fuse_ino_t ino,
     yfs_client::inum inum = ino; // req->in.h.nodeid;
     yfs_client::status ret;
 
-    printf("\n\nxxx");
     ret = getattr(inum, st);
     if(ret != yfs_client::OK){
       fuse_reply_err(req, ENOENT);
@@ -255,6 +254,7 @@ fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
   int inum_, direct_io_, keep_cache_;
+  printf("\n in fuse open");
  if(yfs->open_file(ino, &inum_, &direct_io_, &keep_cache_)){
   fi->fh = inum_;
   fi->direct_io = direct_io_;

@@ -12,7 +12,17 @@
 static std::map<extent_protocol::extentid_t, std::string> file_storage;
 static std::map<extent_protocol::extentid_t, extent_protocol::attr> file_attr;
 
-extent_server::extent_server() {}
+extent_server::extent_server() {
+  
+  extent_protocol::attr new_attr;
+  new_attr.size = 0;
+  new_attr.atime = 0;
+  new_attr.mtime = 0;
+  new_attr.ctime = 0;
+  
+  file_attr[1] = new_attr;
+  file_storage[1] = "";
+}
 
 
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
