@@ -171,7 +171,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   // e.attr appropriately.
   found = yfs->lookup(parent, name, &inum_, &size_);
   e.attr.st_ino = inum_;
-  e.attr.st_ino = size_;
+  e.attr.st_size = size_;
 
   if (found)
     fuse_reply_entry(req, &e);

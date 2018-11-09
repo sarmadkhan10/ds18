@@ -109,47 +109,45 @@ yfs_client::getdir(inum inum, dirinfo &din)
 int 
 yfs_client::lookup(unsigned long long parent, const char *name, unsigned long long *inum_, int *size_)
 {
- string value, content;
- int loc;
- unsigned long long inum = 0;
- ostringstream out;
-  unsigned long long inum_new;
+  string value;
+  int loc;
+  unsigned long long inum = 0;
+  ostringstream out;
+  extent_protocol::attr a;
+
+  printf("\nclient lookup enter ");
+  std::cout << name << std::endl;
  
- FSlock fs(&m_);
- if(ec->get(parent, value) != yfs_client::OK)
- {
-  do{
-    mt19937_64::result_type seed = time(0);
-    mt19937_64 mt_rand(seed);
-    inum_new =  mt_rand();
-  } while(!isfile(inum_new));
+  FSlock fs(&m_);
+  printf("\nclient lookup lock acquired\n");
 
+  // verify parent is a directory
+  if(!isdir(parent)) return false;
 
-  //sprintf(temp, "name.%llu;", inum);
-  out << "name." << inum_new <<";";
-  value  += out.str();
-  ec->put(inum_new, value);
+  if(ec->get(parent, value) != yfs_client::OK) return false;
 
-  return yfs_client::OK;
-   //to be set more based on test results
- }
+  printf("\nclient lookup 1\n");
 
- if(value.empty())
- {
+  if(value.empty()) return false;
 
-   return yfs_client::OK;
- }
+  printf("\nclient lookup 2\n");
 
- loc = value.find(name, 0);
- if(loc != string::npos)
-   inum = stoi(strtok(&value[value.find(".", loc+1)+1], ";")) ;
- if(inum == 0)
-   return 0;
+  loc = value.find(name, 0);
+  if(loc != string::npos)
+    inum = stoi(strtok(&value[value.find(".", loc+1)+1], ";")) ;
+
+  if(inum == 0) return false;
+
+  printf("\nclient lookup 3\n");
   *inum_ = inum;
- ec->put(inum, content);
 
- *size_ = content.size(); 
- return 1;
+
+  // get attr
+  if(ec->getattr(inum, a) != yfs_client::OK) return false;
+
+  *size_ = a.size;
+
+  return 1;
 }
 /*
  *fuse createhelper invokes this 
@@ -166,6 +164,9 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
 yfs_client::status
 yfs_client::createhelper(unsigned long long parent, const char *name)
 {
+  printf("\ncreatehelper ");
+  std::cout << "parent " << parent << " name " << name << endl;
+
   string value;
   string temp;
   unsigned long long inum_;

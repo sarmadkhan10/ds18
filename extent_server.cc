@@ -32,7 +32,7 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 
   // update attr i.e. times
   extent_protocol::attr new_attr;
-  new_attr.size = 0;
+  new_attr.size = buf.size();
   new_attr.atime = 0; //TODO: calculate these times
   new_attr.mtime = 0;
   new_attr.ctime = 0;
@@ -44,9 +44,15 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 
 int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
 {
-  buf = file_storage[id];
+  int ret_val = extent_protocol::NOENT;
 
-  return extent_protocol::OK;
+  if(file_storage.find(id) != file_storage.end()) {
+    buf = file_storage[id];
+
+    ret_val = extent_protocol::OK;
+  }
+
+  return ret_val;
 }
 
 int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr &a)
