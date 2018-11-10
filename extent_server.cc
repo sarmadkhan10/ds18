@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ctime>
 
 // map for storing file/dir content
 static std::map<extent_protocol::extentid_t, std::string> file_storage;
@@ -16,9 +17,9 @@ extent_server::extent_server() {
   
   extent_protocol::attr new_attr;
   new_attr.size = 0;
-  new_attr.atime = 0;
-  new_attr.mtime = 0;
-  new_attr.ctime = 0;
+  new_attr.atime = std::time(0);
+  new_attr.mtime = std::time(0);
+  new_attr.ctime = std::time(0);
   
   file_attr[1] = new_attr;
   file_storage[1] = "";
@@ -33,9 +34,9 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
   // update attr i.e. times
   extent_protocol::attr new_attr;
   new_attr.size = buf.size();
-  new_attr.atime = 0; //TODO: calculate these times
-  new_attr.mtime = 0;
-  new_attr.ctime = 0;
+  new_attr.atime = std::time(0); //TODO: calculate these times
+  new_attr.mtime = std::time(0);
+  new_attr.ctime = std::time(0);
 
   file_attr[id] = new_attr;
 
