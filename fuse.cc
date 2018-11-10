@@ -252,7 +252,7 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     return;
   }
 
-  printf("fuseserver_readdir: is a dir\n");
+  cout << "fuseserver_readdir is a dir: " << ino << endl;
 
   memset(&b, 0, sizeof(b));
 
@@ -260,45 +260,51 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   string value;
   yfs->get_(ino, value);
 
-  if(value.empty()) cout << "empty readdir" << endl;
+  if(!value.empty()) {
 
-  istringstream iss(value);
-  string file_entry;
-  while (getline(iss, file_entry, ';'))
-  {
-    int l = file_entry.find(".");
-    string file_name_;
-    char file_name[128];
-    file_name_ = file_entry.substr(0, l);
-    cout << "ccfilename: " << file_name << endl;
-    strcpy(file_name, file_name_.c_str());
+    istringstream iss(value);
+    string file_entry;
+    while (getline(iss, file_entry, ';'))
+    {
+      int l = file_entry.find(".");
+      string file_name_;
+      char file_name[128];
+      file_name_ = file_entry.substr(0, l);
+      
+      strcpy(file_name, file_name_.c_str());
 
-    fuse_ino_t inum_ = stoull(file_entry.substr(l+1));
+      fuse_ino_t inum_ = stoull(file_entry.substr(l+1));
 
-    //still not sure what to add in the structure, reorganize based on the test results
-    b.size = strlen(file_name);
-    dirbuf_add(&b, file_name, inum_);
+      cout << "ccfilename: " << file_name << " inum: " << inum_ << endl;
+
+      //still not sure what to add in the structure, reorganize based on the test results
+      b.size = strlen(file_name);
+      dirbuf_add(&b, file_name, inum_);
+    }
   }
+  else
+    cout << "empty readdir" << endl;
 
-   reply_buf_limited(req, b.p, b.size, off, size);
-   free(b.p);
- }
+  reply_buf_limited(req, b.p, b.size, off, size);
+  free(b.p);
+}
 
 
 void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
-  int inum_, direct_io_, keep_cache_;
-  printf("\n in fuse open");
- if(yfs->open_file(ino, &inum_, &direct_io_, &keep_cache_)){
-  fi->fh = inum_;
-  fi->direct_io = direct_io_;
-  fi->keep_cache = keep_cache_;
-  fuse_reply_open(req, fi);
- }
- else
-  fuse_reply_err(req, ENOSYS);
+  cout << "fuseopen. ino: " << ino << endl;
+
+  if(yfs->open_file(ino)){
+    fi->fh = ino;
+
+    cout << "fuseopen open file success. ino: " << ino << endl;
+
+    fuse_reply_open(req, fi);
+  }
+  else
+    fuse_reply_err(req, EIO);
 }
 
 void

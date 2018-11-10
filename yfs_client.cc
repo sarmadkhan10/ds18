@@ -11,9 +11,11 @@
 #include <random>
 #include <string>
 #include <sstream>
-//#include <fuse_lowlevel.h>
 
 using namespace std;
+
+static std::mt19937_64 mt_rand_gen(time(0));
+
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
@@ -141,7 +143,7 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
 
   *size_ = a.size;
 
-  printf("client lookup successful exit\n");
+  cout << "client lookup successful exit. " << name << " " << "inum: " <<  inum << endl;
 
   return true;
 }
@@ -169,7 +171,6 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   int size;
   //extend_protocol::attr a;
   ostringstream out;
-  //FSlock fs(&m_);
 
   //check if file already present
   if(lookup(parent, name, &inum_, &size)) {
@@ -188,10 +189,10 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
 
   //genereate a 64 bit random number and check if has 31st bit one (recognising a file)
   do {
-    mt19937_64::result_type seed = time(0);
-    mt19937_64 mt_rand(seed);
-    inum_ =  mt_rand();
+    inum_ = mt_rand_gen();
   } while(!isfile(inum_));
+
+  cout << "randgen: " << inum_ << endl;
 
   // create a new entry for file
   ec->put(inum_, "");
@@ -231,36 +232,15 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
  *@param fi file information structure
  */
 bool
-yfs_client::open_file(unsigned long long ino,
-      int *inum_, int *direct_io_, int *keep_cache_)
+yfs_client::open_file(unsigned long long ino)
 {
   string value;
-  unsigned long long inum;
   ostringstream out;
   printf("\n on open file client");
 
-  FILE *fp = fopen("debug.txt" , "w");
-
-  //FSlock fs(&m_);
-  ec->get(ino, value);
-  //check if the file already present
-  if(value.empty()){
-    do{
-      mt19937_64::result_type seed = time(0);
-      mt19937_64 mt_rand(seed);
-      inum =  mt_rand();
-      fprintf(fp, "\nloop");
-    }
-    while(!isfile(inum));
-
-    out << "name." << inum_ <<";";
-    value  += out.str();
-    ec->put(inum, value);
-    return yfs_client::OK;
-  }
-  *inum_ = ino;
-  *direct_io_ = 0;
-  *keep_cache_ = 0;
+  // if file is not present, return false
+  if(ec->get(ino, value) != yfs_client::OK) return false;
+  else return true;
 
 //include based on test results
 #if 0 
@@ -278,8 +258,7 @@ yfs_client::open_file(unsigned long long ino,
 
   return true;
 }
-int yfs_client::get_(unsigned long long inum_, string buf){
+int yfs_client::get_(unsigned long long inum_, string &buf){
 
-  //FSlock fs(&m_);
   return ec->get(inum_, buf);
 }
