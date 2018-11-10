@@ -188,6 +188,18 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   // `parent' in YFS. If the file was found, initialize e.ino and
   // e.attr appropriately.
   found = yfs->lookup(parent, name, &inum_, &size_);
+
+  e.ino = inum_;
+
+  if(yfs->isfile(inum_)) {
+    e.attr.st_mode = S_IFREG | 0666;
+    e.attr.st_nlink = 1;
+    e.attr.st_size = size_;
+  } else {
+    e.attr.st_mode = S_IFDIR | 0777;
+    e.attr.st_nlink = 2;
+  }
+
   e.attr.st_ino = inum_;
   e.attr.st_size = size_;
 
@@ -235,27 +247,33 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
   printf("fuseserver_readdir\n");
 
- if(!yfs->isdir(inum)){
+  if(!yfs->isdir(inum)){
     fuse_reply_err(req, ENOTDIR);
     return;
   }
+
+  printf("fuseserver_readdir: is a dir\n");
 
   memset(&b, 0, sizeof(b));
 
 
   string value;
   yfs->get_(ino, value);
+
+  if(value.empty()) cout << "empty readdir" << endl;
+
   istringstream iss(value);
   string file_entry;
   while (getline(iss, file_entry, ';'))
   {
     int l = file_entry.find(".");
     string file_name_;
-    char file_name[20];
+    char file_name[128];
     file_name_ = file_entry.substr(0, l);
+    cout << "ccfilename: " << file_name << endl;
     strcpy(file_name, file_name_.c_str());
 
-    fuse_ino_t inum_ = stoi(file_entry.substr(l+1));
+    fuse_ino_t inum_ = stoull(file_entry.substr(l+1));
 
     //still not sure what to add in the structure, reorganize based on the test results
     b.size = strlen(file_name);

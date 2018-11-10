@@ -129,7 +129,6 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   if(value.empty()) return false;
 
   loc = value.find(name, 0);
-  std::cout << "loc: " << loc << " value: " << value << endl;
   if(loc != string::npos)
     inum = stoull(strtok(&value[value.find(".", loc+1)+1], ";"));
   else
@@ -185,7 +184,7 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
     return yfs_client::NOENT;
   }
 
-  cout << "createhelper " << parent << " " << "get value done: " << value << endl;
+  cout << "createhelper " << parent << " " << "get value done." << endl;
 
   //genereate a 64 bit random number and check if has 31st bit one (recognising a file)
   do {
