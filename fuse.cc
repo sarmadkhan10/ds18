@@ -138,9 +138,11 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
 
   attr.st_ino = ino;
 
+  yfs->getdir(ino, attr);
+
   e->ino = ino;
   e->attr = attr;
-
+  
   return ret;
 }
 
@@ -182,13 +184,11 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   // `parent' in YFS. If the file was found, initialize e.ino and
   // e.attr appropriately.
   found = yfs->lookup(parent, name, &inum_, &size_);
-
-  if (found){
-
   e.attr.st_ino = inum_;
   e.attr.st_size = size_;
+
+  if (found)
     fuse_reply_entry(req, &e);
-  }
   else
     fuse_reply_err(req, ENOENT);
 }

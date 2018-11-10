@@ -12,8 +12,6 @@
 #include <string>
 #include <sstream>
 //#include <fuse_lowlevel.h>
-#include "lock_protocol.h"
-#include "lock_client.h"
 
 using namespace std;
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
@@ -108,7 +106,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
  *@param: forwarding all the parameter values from fuse lookup
  */
 
-bool 
+int 
 yfs_client::lookup(unsigned long long parent, const char *name, unsigned long long *inum_, int *size_)
 {
   string value;
@@ -122,29 +120,37 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
 
   printf("\nclient lookup enter ");
   std::cout << name << std::endl;
-<<<<<<< HEAD
- 
-  printf("\nclient lookup lock acquired\n");
-=======
->>>>>>> 6c2bbdb83a2f7d00d68c04952a7f0b7e17e0cb61
 
   // verify parent is a directory
-  if(!isdir(parent)) return false;
+  if(!isdir(parent)){ 
+  cout << "\n IN LOOKUP:" << parent << "is not a directory -- return ";
+	return false;
+  }
 
-  if(ec->get(parent, value) != yfs_client::OK) return false;
 
-  if(value.empty()) return false;
+  if(ec->get(parent, value) != yfs_client::OK) {
+  cout << "\n IN LOOKUP:" << parent << "no parent exits -- return ";
+return false;
+  }
+
+  if(value.empty()) {
+  cout << "\n IN LOOKUP:" << parent << "parent exits but empty -- return ";
+return false;
+}
 
   loc = value.find(name, 0);
   if(loc != string::npos)
-    inum = stoi(strtok(&value[value.find(".", loc+1)+1], ";"));
+    inum = stoll(strtok(&value[value.find(".", loc+1)+1], ";"));
   else
     return false;
 
   *inum_ = inum;
 
   // get attr
-  if(ec->getattr(inum, a) != yfs_client::OK) return false;
+  if(ec->getattr(inum, a) != yfs_client::OK) {
+  cout << "\n IN LOOKUP:" << name << "entry made but no attribute in server --return";
+return false;
+}
 
   *size_ = a.size;
 
@@ -174,15 +180,13 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   int  size; 
   //extend_protocol::attr a;
   ostringstream out;
-<<<<<<< HEAD
-=======
   //FSlock fs(&m_);
->>>>>>> 6c2bbdb83a2f7d00d68c04952a7f0b7e17e0cb61
 
   //check if file already present
-  if(lookup(parent, name, &inum_, &size))
+  if(lookup(parent, name, &inum_, &size)){
+    cout << "\nIN CREATE_HELPER: " << name << "already exits --return ";
     return yfs_client::OK;
-  printf("\nlook returned found in create helper");
+  }
   
   ec->get(parent, value);
 
@@ -193,6 +197,7 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
     inum_ =  mt_rand();
   } while(!isfile(inum_));
 
+  *ino_new = inum_;
   // create a new entry for file
   ec->put(inum_, "");
 
@@ -200,6 +205,9 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   out << name << "." << inum_ <<";";
   value += out.str();
   ec->put(parent, value);
+
+
+  cout << "\nIN CREATE_HELPER: " << name << "created and inserted";
 
   return yfs_client::OK;
 //include based on test results
@@ -237,10 +245,7 @@ yfs_client::open_file(unsigned long long ino,
 
   FILE *fp = fopen("debug.txt" , "w");
 
-<<<<<<< HEAD
-=======
   //FSlock fs(&m_);
->>>>>>> 6c2bbdb83a2f7d00d68c04952a7f0b7e17e0cb61
   ec->get(ino, value);
   //check if the file already present
   if(value.empty()){
@@ -279,9 +284,6 @@ yfs_client::open_file(unsigned long long ino,
 }
 int yfs_client::get_(unsigned long long inum_, string buf){
 
-<<<<<<< HEAD
-=======
   //FSlock fs(&m_);
->>>>>>> 6c2bbdb83a2f7d00d68c04952a7f0b7e17e0cb61
   return ec->get(inum_, buf);
 }

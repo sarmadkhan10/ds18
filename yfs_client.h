@@ -7,8 +7,6 @@
 //#include "yfs_protocol.h"
 #include "extent_client.h"
 #include <vector>
-#include "lock_protocol.h"
-#include "lock_client.h"
 
 
   class yfs_client {
@@ -49,13 +47,8 @@
 
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
-<<<<<<< HEAD
-  yfs_client::status createhelper(unsigned long long, const char*);
-  bool lookup(unsigned long long, const char*, unsigned long long*, int*);
-=======
   yfs_client::status createhelper(unsigned long long, const char*, unsigned long long *);
   int lookup(unsigned long long, const char*, unsigned long long*, int*);
->>>>>>> 6c2bbdb83a2f7d00d68c04952a7f0b7e17e0cb61
   bool open_file(unsigned long long, int*, int*, int*);
   int get_(unsigned long long , std::string);
   
