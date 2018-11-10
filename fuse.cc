@@ -16,7 +16,6 @@
 #include <unistd.h>
 #include <assert.h>
 #include <arpa/inet.h>
-//#include <string>
 #include "yfs_client.h"
 
 using namespace std;
@@ -277,8 +276,6 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
       cout << "ccfilename: " << file_name << " inum: " << inum_ << endl;
 
-      //still not sure what to add in the structure, reorganize based on the test results
-      b.size = strlen(file_name);
       dirbuf_add(&b, file_name, inum_);
     }
   }

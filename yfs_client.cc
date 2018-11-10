@@ -169,7 +169,6 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   string temp;
   unsigned long long inum_;
   int size;
-  //extend_protocol::attr a;
   ostringstream out;
 
   //check if file already present
@@ -191,8 +190,6 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   do {
     inum_ = mt_rand_gen();
   } while(!isfile(inum_));
-
-  cout << "randgen: " << inum_ << endl;
 
   // create a new entry for file
   ec->put(inum_, "");
