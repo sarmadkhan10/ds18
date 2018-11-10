@@ -14,12 +14,10 @@
   class yfs_client {
   extent_client *ec;
  public:
-  lock_client *lc;
 
   typedef unsigned long long inum;
   enum xxstatus { OK, RPCERR, NOENT, IOERR, FBIG };
   typedef int status;
-  lock_protocol::lockid_t a = 1;
 
   struct fileinfo {
     unsigned long long size;
@@ -52,7 +50,7 @@
   int getfile(inum, fileinfo &);
   int getdir(inum, dirinfo &);
   yfs_client::status createhelper(unsigned long long, const char*);
-  int lookup(unsigned long long, const char*, unsigned long long*, int*);
+  bool lookup(unsigned long long, const char*, unsigned long long*, int*);
   bool open_file(unsigned long long, int*, int*, int*);
   int get_(unsigned long long , std::string);
   

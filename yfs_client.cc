@@ -20,7 +20,6 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
   assert(pthread_mutex_init(&m_, 0) == 0);
-  lc = new lock_client(lock_dst);
 
 }
 
@@ -109,7 +108,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
  *@param: forwarding all the parameter values from fuse lookup
  */
 
-int 
+bool 
 yfs_client::lookup(unsigned long long parent, const char *name, unsigned long long *inum_, int *size_)
 {
   string value;
@@ -121,8 +120,6 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   printf("\nclient lookup enter ");
   std::cout << name << std::endl;
  
-  lc->acquire(inum);
-  //FSlock fs(&m_);
   printf("\nclient lookup lock acquired\n");
 
   // verify parent is a directory
@@ -150,7 +147,6 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   if(ec->getattr(inum, a) != yfs_client::OK) return false;
 
   *size_ = a.size;
-  lc->release(inum);
 
   return 1;
 }
@@ -178,11 +174,11 @@ yfs_client::createhelper(unsigned long long parent, const char *name)
   int  size; 
   //extend_protocol::attr a;
   ostringstream out;
-  FSlock fs(&m_);
 
   //check if file already present
   if(lookup(parent, name, &inum_, &size))
     return yfs_client::OK;
+  printf("\nlook returned found in create helper");
   
    ec->get(parent, value);
 
@@ -235,8 +231,6 @@ yfs_client::open_file(unsigned long long ino,
 
   FILE *fp = fopen("debug.txt" , "w");
 
-  //lc->acquire(a);
-  FSlock fs(&m_);
   ec->get(ino, value);
   //check if the file already present
   if(value.empty()){
@@ -275,6 +269,5 @@ yfs_client::open_file(unsigned long long ino,
 }
 int yfs_client::get_(unsigned long long inum_, string buf){
 
-  FSlock fs(&m_);
   return ec->get(inum_, buf);
 }
