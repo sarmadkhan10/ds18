@@ -115,39 +115,33 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   ostringstream out;
   extent_protocol::attr a;
 
+  // initially set it to zero
+  *inum_ = 0;
+
   printf("\nclient lookup enter ");
   std::cout << name << std::endl;
- 
-  FSlock fs(&m_);
-  printf("\nclient lookup lock acquired\n");
 
   // verify parent is a directory
   if(!isdir(parent)) return false;
 
   if(ec->get(parent, value) != yfs_client::OK) return false;
 
-  printf("\nclient lookup 1\n");
-
   if(value.empty()) return false;
-
-  printf("\nclient lookup 2\n");
 
   loc = value.find(name, 0);
   if(loc != string::npos)
-    inum = stoi(strtok(&value[value.find(".", loc+1)+1], ";")) ;
+    inum = stoi(strtok(&value[value.find(".", loc+1)+1], ";"));
+  else
+    return false;
 
-  if(inum == 0) return false;
-
-  printf("\nclient lookup 3\n");
   *inum_ = inum;
-
 
   // get attr
   if(ec->getattr(inum, a) != yfs_client::OK) return false;
 
   *size_ = a.size;
 
-  return 1;
+  return true;
 }
 /*
  *fuse createhelper invokes this 
@@ -162,7 +156,7 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
  *@param fuse_entry_param entire attribute   
  */
 yfs_client::status
-yfs_client::createhelper(unsigned long long parent, const char *name)
+yfs_client::createhelper(unsigned long long parent, const char *name, unsigned long long *ino_new)
 {
   printf("\ncreatehelper ");
   std::cout << "parent " << parent << " name " << name << endl;
@@ -173,26 +167,28 @@ yfs_client::createhelper(unsigned long long parent, const char *name)
   int  size; 
   //extend_protocol::attr a;
   ostringstream out;
-  FSlock fs(&m_);
+  //FSlock fs(&m_);
 
   //check if file already present
   if(lookup(parent, name, &inum_, &size))
     return yfs_client::OK;
   
-   ec->get(parent, value);
+  ec->get(parent, value);
 
-//genereate a 64 bit random number and check if has 31st bit one (recognising a file)
-  do{
+  //genereate a 64 bit random number and check if has 31st bit one (recognising a file)
+  do {
     mt19937_64::result_type seed = time(0);
     mt19937_64 mt_rand(seed);
     inum_ =  mt_rand();
   } while(!isfile(inum_));
 
+  // create a new entry for file
+  ec->put(inum_, "");
 
-  //sprintf(temp, "name.%llu;", inum);
-  out << "name." << inum_ <<";";
-  value  += out.str();
-  ec->put(inum_, value);
+  // update parent dir entry
+  out << name << "." << inum_ <<";";
+  value += out.str();
+  ec->put(parent, value);
 
   return yfs_client::OK;
 //include based on test results
@@ -230,7 +226,7 @@ yfs_client::open_file(unsigned long long ino,
 
   FILE *fp = fopen("debug.txt" , "w");
 
-  FSlock fs(&m_);
+  //FSlock fs(&m_);
   ec->get(ino, value);
   //check if the file already present
   if(value.empty()){
@@ -269,6 +265,6 @@ yfs_client::open_file(unsigned long long ino,
 }
 int yfs_client::get_(unsigned long long inum_, string buf){
 
-  FSlock fs(&m_);
+  //FSlock fs(&m_);
   return ec->get(inum_, buf);
 }

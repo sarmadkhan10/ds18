@@ -128,8 +128,20 @@ yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
+  unsigned long long ino;
+  struct stat attr;
+  yfs_client::status ret;
 
-  return yfs->createhelper(parent, name); 
+  memset(&attr, 0, sizeof(attr));
+
+  ret = yfs->createhelper(parent, name, &ino); 
+
+  attr.st_ino = ino;
+
+  e->ino = ino;
+  e->attr = attr;
+
+  return ret;
 }
 
 void
