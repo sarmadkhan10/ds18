@@ -2,12 +2,11 @@
 #include <assert.h>
 #ifndef yfs_client_h
 #define yfs_client_h
-
 #include <string>
 //#include "yfs_protocol.h"
 #include "extent_client.h"
 #include <vector>
-
+#include <random>
 
   class yfs_client {
   extent_client *ec;
@@ -49,8 +48,8 @@
   int getdir(inum, dirinfo &);
   yfs_client::status createhelper(unsigned long long, const char*, unsigned long long *);
   int lookup(unsigned long long, const char*, unsigned long long*, int*);
-  bool open_file(unsigned long long, int*, int*, int*);
-  int get_(unsigned long long , std::string);
+  bool open_file(unsigned long long);
+  int get_(unsigned long long , std::string &);
   
 };
 
