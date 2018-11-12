@@ -50,7 +50,8 @@
   int lookup(unsigned long long, const char*, unsigned long long*, int*);
   bool open_file(unsigned long long);
   int get_(unsigned long long , std::string &);
-  
+  bool write_file(unsigned long long, const char*, size_t, off_t);
+  bool read_file(unsigned long long, size_t, off_t, std::string &);
 };
 
 #endif 

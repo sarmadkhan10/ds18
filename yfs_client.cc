@@ -259,3 +259,37 @@ int yfs_client::get_(unsigned long long inum_, string &buf){
 
   return ec->get(inum_, buf);
 }
+
+// writes to the file inum if it exists
+bool
+yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off_t offset) {
+  // get the prev file content (if it exists)
+  string prev_val;
+  if(ec->get(inum, prev_val) == yfs_client::NOENT) return false;
+
+  // construct the new content of the file
+  string new_val = prev_val.substr(0, offset);
+  new_val += string(buf, len);
+
+  return ec->put(inum, new_val);
+}
+
+// reads from a file if it exists
+bool
+yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string &buf) {
+  // get the file content (if it exists)
+  string file_content;
+  if(ec->get(inum, file_content) == yfs_client::NOENT) return false;
+
+  // read file
+  string read_content = file_content.substr(offset, len);
+
+  // check if EOF reached
+  if(read_content.size() < len) {
+    //TODO: handle this case
+  }
+
+  buf = read_content;
+
+  return true;
+}
