@@ -118,41 +118,32 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   // initially set it to zero
   *inum_ = 0;
 
-  printf("\nclient lookup enter ");
+  printf("client lookup enter ");
   std::cout << name << std::endl;
 
   // verify parent is a directory
-  if(!isdir(parent)){ 
-  cout << "\n IN LOOKUP:" << parent << "is not a directory -- return ";
-	return false;
-  }
+  if(!isdir(parent)) return false;
 
+  if(ec->get(parent, value) != yfs_client::OK) return false;
+  if(!isfile(parent)) return true;
 
-  if(ec->get(parent, value) != yfs_client::OK) {
-  cout << "\n IN LOOKUP:" << parent << "no parent exits -- return ";
-return false;
-  }
-
-  if(value.empty()) {
-  cout << "\n IN LOOKUP:" << parent << "parent exits but empty -- return ";
-return false;
-}
+  if(value.empty()) return false;
 
   loc = value.find(name, 0);
+  std::cout << "loc: " << loc << " value: " << value << endl;
   if(loc != string::npos)
-    inum = stoll(strtok(&value[value.find(".", loc+1)+1], ";"));
+    inum = stoull(strtok(&value[value.find(".", loc+1)+1], ";"));
   else
     return false;
 
   *inum_ = inum;
 
   // get attr
-  if(ec->getattr(inum, a) != yfs_client::OK) {
-  cout << "\n IN LOOKUP:" << name << "entry made but no attribute in server --return";
-return false;
-}
+  if(ec->getattr(inum, a) != yfs_client::OK) return false;
 
   *size_ = a.size;
+
+  printf("client lookup successful exit\n");
 
   return true;
 }
@@ -177,18 +168,25 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   string value;
   string temp;
   unsigned long long inum_;
-  int  size; 
+  int size;
   //extend_protocol::attr a;
   ostringstream out;
   //FSlock fs(&m_);
 
   //check if file already present
-  if(lookup(parent, name, &inum_, &size)){
-    cout << "\nIN CREATE_HELPER: " << name << "already exits --return ";
+  if(lookup(parent, name, &inum_, &size)) {
+    cout << "createhelper " << parent << " " << name << " already present!" << endl;
     return yfs_client::OK;
   }
+
+  cout << "createhelper " << parent << " " << name << "not already present." << endl;
   
-  ec->get(parent, value);
+  if(ec->get(parent, value) != yfs_client::OK) {
+    cout << "createhelper " << parent << " does not exist." << endl;
+    return yfs_client::NOENT;
+  }
+
+  cout << "createhelper " << parent << " " << "get value done: " << value << endl;
 
   //genereate a 64 bit random number and check if has 31st bit one (recognising a file)
   do {
@@ -197,17 +195,17 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
     inum_ =  mt_rand();
   } while(!isfile(inum_));
 
-  *ino_new = inum_;
   // create a new entry for file
   ec->put(inum_, "");
+
+  *ino_new = inum_;
 
   // update parent dir entry
   out << name << "." << inum_ <<";";
   value += out.str();
   ec->put(parent, value);
 
-
-  cout << "\nIN CREATE_HELPER: " << name << "created and inserted";
+  cout << "createhelper successful exit." << endl;
 
   return yfs_client::OK;
 //include based on test results

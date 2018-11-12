@@ -137,12 +137,16 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
   ret = yfs->createhelper(parent, name, &ino); 
 
   attr.st_ino = ino;
-
-  yfs->getdir(ino, attr);
+  attr.st_mode = S_IFREG | 0666;
+  attr.st_nlink = 1;
 
   e->ino = ino;
   e->attr = attr;
+  e->attr_timeout = 0.0;
+  e->entry_timeout = 0.0;
+  e->generation = 1;
   
+
   return ret;
 }
 
@@ -295,7 +299,7 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 void
 fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-
+  cout << "unlink called." << endl;
   // You fill this in
   // Success:	fuse_reply_err(req, 0);
   // Not found:	fuse_reply_err(req, ENOENT);
