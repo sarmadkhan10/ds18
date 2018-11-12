@@ -86,10 +86,10 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set
   string value;
   printf("fuseserver_setattr 0x%x\n", to_set);
   if (FUSE_SET_ATTR_SIZE & to_set) {
-    yfs->get(into, value);
+    yfs->get_(ino, value);
     //get the size of file and set it to attr
     if(yfs->isfile(ino)){
-    	attr->size = value.size();
+    	attr->st_size = value.size();
     	struct stat st;
     	fuse_reply_attr(req, &st, 0);
     	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
@@ -97,7 +97,7 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set
     //if a directory --not yet sure what the size should be
     //conservatively setting it to size of value
     else{
-    	attr->size = value.size();
+    	attr->st_size = value.size();
     	struct stat st;
     	fuse_reply_attr(req, &st, 0);
     	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
