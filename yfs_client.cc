@@ -127,7 +127,6 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   if(!isdir(parent)) return false;
 
   if(ec->get(parent, value) != yfs_client::OK) return false;
-  if(!isfile(parent)) return true;
 
   if(value.empty()) return false;
 
