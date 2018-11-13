@@ -121,7 +121,7 @@ fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
   cout << "fuseserver_read called" << endl;
   string read_content;
 
-  if(yfs->read_file(ino, size, off, read_content)) {
+  if(yfs->read_file(ino, size, off, read_content) == yfs_client::OK) {
     fuse_reply_buf(req, read_content.c_str(), size);
   }
   else
@@ -135,7 +135,7 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
 {
   // You fill this in
   cout << "fuseserver_write called" << endl;
-  if(yfs->write_file(ino, buf, size, off))
+  if(yfs->write_file(ino, buf, size, off) == yfs_client::OK)
     fuse_reply_write(req, size);
   else
     fuse_reply_err(req, ENOENT);

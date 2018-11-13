@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <ctime>
 
+using namespace std;
+
 // map for storing file/dir content
 static std::map<extent_protocol::extentid_t, std::string> file_storage;
 static std::map<extent_protocol::extentid_t, extent_protocol::attr> file_attr;

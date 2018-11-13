@@ -261,11 +261,13 @@ int yfs_client::get_(unsigned long long inum_, string &buf){
 }
 
 // writes to the file inum if it exists
-bool
+int
 yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off_t offset) {
   // get the prev file content (if it exists)
   string prev_val;
-  if(ec->get(inum, prev_val) == yfs_client::NOENT) return false;
+  if(ec->get(inum, prev_val) == yfs_client::NOENT) return yfs_client::NOENT;
+
+  cout << "write file 1" << endl;
 
   // construct the new content of the file
   string new_val = prev_val.substr(0, offset);
@@ -275,11 +277,11 @@ yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off
 }
 
 // reads from a file if it exists
-bool
+int
 yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string &buf) {
   // get the file content (if it exists)
   string file_content;
-  if(ec->get(inum, file_content) == yfs_client::NOENT) return false;
+  if(ec->get(inum, file_content) == yfs_client::NOENT) return yfs_client::NOENT;
 
   // read file
   string read_content = file_content.substr(offset, len);
@@ -291,5 +293,5 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
 
   buf = read_content;
 
-  return true;
+  return yfs_client::OK;
 }
