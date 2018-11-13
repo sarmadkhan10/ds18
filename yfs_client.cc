@@ -174,6 +174,7 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   //check if file already present
   if(lookup(parent, name, &inum_, &size)) {
     cout << "createhelper " << parent << " " << name << " already present!" << endl;
+    *ino_new = inum_;
     return yfs_client::OK;
   }
 
@@ -269,6 +270,8 @@ yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off
 
   cout << "write file 1" << endl;
 
+  assert(offset <= prev_val.size());
+
   // construct the new content of the file
   string new_val = prev_val.substr(0, offset);
   new_val += string(buf, len);
@@ -289,6 +292,7 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
   // check if EOF reached
   if(read_content.size() < len) {
     //TODO: handle this case
+    assert("read file beyond not implemented");
   }
 
   buf = read_content;

@@ -17,6 +17,7 @@
 #include <assert.h>
 #include <arpa/inet.h>
 #include "yfs_client.h"
+#include <algorithm>
 
 using namespace std;
 
@@ -85,31 +86,47 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set
 {
   string value;
   printf("fuseserver_setattr 0x%x\n", to_set);
+
   if (FUSE_SET_ATTR_SIZE & to_set) {
-    yfs->get_(ino, value);
-    //get the size of file and set it to attr
-    if(yfs->isfile(ino)){
-    	attr->st_size = value.size();
-    	struct stat st;
-    	fuse_reply_attr(req, &st, 0);
-    	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+    if(yfs->get_(ino, value) == yfs_client::OK) {
+      // check the file size
+      if(yfs->isfile(ino)) {
+      	// truncate the value
+        if(attr->st_size <= value.size()) {
+          value = value.substr(0, max((off_t) 0, attr->st_size-1));
+        }
+        // pad with '\0'
+        else {
+          unsigned int to_pad = attr->st_size - value.size();
+
+          value += string(to_pad, '\0');
+        }
+
+        cout << "size: " << value.size() << " st_size: " << attr->st_size << endl;
+
+        assert(value.size() == attr->st_size);
+
+        assert(yfs->write_file(ino, value.c_str(), attr->st_size, 0) == yfs_client::OK);
+
+      	struct stat st;
+        st.st_size = attr->st_size;
+      	fuse_reply_attr(req, &st, 0);
+      	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+      } else {
+        // not doing it for dir
+        assert("setattr for a dir called");
+      }
+      //if a directory --not yet sure what the size should be
+      //conservatively setting it to size of value
+      /*else{
+      	attr->st_size = value.size();
+      	struct stat st;
+      	fuse_reply_attr(req, &st, 0);
+      	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+      }*/
+    } else {
+      fuse_reply_err(req, ENOENT);
     }
-    //if a directory --not yet sure what the size should be
-    //conservatively setting it to size of value
-    else{
-    	attr->st_size = value.size();
-    	struct stat st;
-    	fuse_reply_attr(req, &st, 0);
-    	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
-    }
-#if 0
-    struct stat st;
-    fuse_reply_attr(req, &st, 0);
-#else
-    fuse_reply_err(req, ENOSYS);
-#endif
-  } else {
-    fuse_reply_err(req, ENOSYS);
   }
 }
 
@@ -162,7 +179,8 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
   e->attr_timeout = 0.0;
   e->entry_timeout = 0.0;
   e->generation = 1;
-  
+
+  cout << "fuse createhelper ret: " << ret << endl;
 
   return ret;
 }
@@ -312,7 +330,7 @@ fuseserver_open(fuse_req_t req, fuse_ino_t ino,
   cout << "fuseopen. ino: " << ino << endl;
 
   if(yfs->open_file(ino)){
-    fi->fh = ino;
+    //fi->fh = ino;
 
     cout << "fuseopen open file success. ino: " << ino << endl;
 
