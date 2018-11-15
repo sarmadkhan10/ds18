@@ -30,6 +30,7 @@ extent_server::extent_server() {
 
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
+  cout << "put: " << buf << endl;
   // store the file/dir content
   file_storage[id] = buf;
 
@@ -41,6 +42,8 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
   new_attr.ctime = std::time(0);
 
   file_attr[id] = new_attr;
+
+  cout << "put2: " << buf.size();
 
   return extent_protocol::OK;
 }

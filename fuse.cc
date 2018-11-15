@@ -106,12 +106,13 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set
 
         assert(value.size() == attr->st_size);
 
-        assert(yfs->write_file(ino, value.c_str(), attr->st_size, 0) == yfs_client::OK);
+        assert(yfs->write_file(ino, value.c_str(), attr->st_size, 0, true) == yfs_client::OK);
 
       	struct stat st;
-        st.st_size = attr->st_size;
+        if(getattr(ino, st) != yfs_client::OK) assert("setattr can't get attr");
       	fuse_reply_attr(req, &st, 0);
       	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+
       } else {
         // not doing it for dir
         assert("setattr for a dir called");
@@ -152,7 +153,7 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
 {
   // You fill this in
   cout << "fuseserver_write called" << endl;
-  if(yfs->write_file(ino, buf, size, off) == yfs_client::OK)
+  if(yfs->write_file(ino, buf, size, off, false) == yfs_client::OK)
     fuse_reply_write(req, size);
   else
     fuse_reply_err(req, ENOENT);

@@ -263,18 +263,22 @@ int yfs_client::get_(unsigned long long inum_, string &buf){
 
 // writes to the file inum if it exists
 int
-yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off_t offset) {
+yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off_t offset, bool trunc) {
+
   // get the prev file content (if it exists)
   string prev_val;
   if(ec->get(inum, prev_val) == yfs_client::NOENT) return yfs_client::NOENT;
 
-  cout << "write file 1" << endl;
-
   assert(offset <= prev_val.size());
 
   // construct the new content of the file
-  string new_val = prev_val.substr(0, offset);
-  new_val += string(buf, len);
+  string new_val;
+
+  if(trunc) {
+    new_val = prev_val.substr(0, offset);
+    new_val += string(buf, len);
+  } else
+    new_val = prev_val.replace(offset, len, string(buf, len));
 
   return ec->put(inum, new_val);
 }
