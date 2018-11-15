@@ -17,6 +17,9 @@
 #include <assert.h>
 #include <arpa/inet.h>
 #include "yfs_client.h"
+#include <algorithm>
+
+using namespace std;
 
 int myid;
 yfs_client *yfs;
@@ -81,18 +84,50 @@ fuseserver_getattr(fuse_req_t req, fuse_ino_t ino,
 void
 fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi)
 {
+  string value;
   printf("fuseserver_setattr 0x%x\n", to_set);
+
   if (FUSE_SET_ATTR_SIZE & to_set) {
-    printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
-    // You fill this in
-#if 0
-    struct stat st;
-    fuse_reply_attr(req, &st, 0);
-#else
-    fuse_reply_err(req, ENOSYS);
-#endif
-  } else {
-    fuse_reply_err(req, ENOSYS);
+    if(yfs->get_(ino, value) == yfs_client::OK) {
+      // check the file size
+      if(yfs->isfile(ino)) {
+      	// truncate the value
+        if(attr->st_size <= value.size()) {
+          value = value.substr(0, max((off_t) 0, attr->st_size-1));
+        }
+        // pad with '\0'
+        else {
+          unsigned int to_pad = attr->st_size - value.size();
+
+          value += string(to_pad, '\0');
+        }
+
+        cout << "size: " << value.size() << " st_size: " << attr->st_size << endl;
+
+        assert(value.size() == attr->st_size);
+
+        assert(yfs->write_file(ino, value.c_str(), attr->st_size, 0, true) == yfs_client::OK);
+
+      	struct stat st;
+        if(getattr(ino, st) != yfs_client::OK) assert("setattr can't get attr");
+      	fuse_reply_attr(req, &st, 0);
+      	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+
+      } else {
+        // not doing it for dir
+        assert("setattr for a dir called");
+      }
+      //if a directory --not yet sure what the size should be
+      //conservatively setting it to size of value
+      /*else{
+      	attr->st_size = value.size();
+      	struct stat st;
+      	fuse_reply_attr(req, &st, 0);
+      	printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+      }*/
+    } else {
+      fuse_reply_err(req, ENOENT);
+    }
   }
 }
 
@@ -101,11 +136,14 @@ fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
       off_t off, struct fuse_file_info *fi)
 {
   // You fill this in
-#if 0
-  fuse_reply_buf(req, buf, size);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+  cout << "fuseserver_read called" << endl;
+  string read_content;
+
+  if(yfs->read_file(ino, size, off, read_content) == yfs_client::OK) {
+    fuse_reply_buf(req, read_content.c_str(), size);
+  }
+  else
+    fuse_reply_err(req, ENOENT);
 }
 
 void
@@ -114,19 +152,38 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
   struct fuse_file_info *fi)
 {
   // You fill this in
-#if 0
-  fuse_reply_write(req, bytes_written);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+  cout << "fuseserver_write called" << endl;
+  if(yfs->write_file(ino, buf, size, off, false) == yfs_client::OK)
+    fuse_reply_write(req, size);
+  else
+    fuse_reply_err(req, ENOENT);
 }
 
 yfs_client::status
 fuseserver_createhelper(fuse_ino_t parent, const char *name,
      mode_t mode, struct fuse_entry_param *e)
 {
-  // You fill this in
-  return yfs_client::NOENT;
+  unsigned long long ino;
+  struct stat attr;
+  yfs_client::status ret;
+
+  memset(&attr, 0, sizeof(attr));
+
+  ret = yfs->createhelper(parent, name, &ino); 
+
+  attr.st_ino = ino;
+  attr.st_mode = S_IFREG | 0666;
+  attr.st_nlink = 1;
+
+  e->ino = ino;
+  e->attr = attr;
+  e->attr_timeout = 0.0;
+  e->entry_timeout = 0.0;
+  e->generation = 1;
+
+  cout << "fuse createhelper ret: " << ret << endl;
+
+  return ret;
 }
 
 void
@@ -156,6 +213,8 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   struct fuse_entry_param e;
   bool found = false;
+  unsigned long long inum_;
+  int size_;
 
   e.attr_timeout = 0.0;
   e.entry_timeout = 0.0;
@@ -164,6 +223,21 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   // Look up the file named `name' in the directory referred to by
   // `parent' in YFS. If the file was found, initialize e.ino and
   // e.attr appropriately.
+  found = yfs->lookup(parent, name, &inum_, &size_);
+
+  e.ino = inum_;
+
+  if(yfs->isfile(inum_)) {
+    e.attr.st_mode = S_IFREG | 0666;
+    e.attr.st_nlink = 1;
+    e.attr.st_size = size_;
+  } else {
+    e.attr.st_mode = S_IFDIR | 0777;
+    e.attr.st_nlink = 2;
+  }
+
+  e.attr.st_ino = inum_;
+  e.attr.st_size = size_;
 
   if (found)
     fuse_reply_entry(req, &e);
@@ -209,32 +283,62 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
   printf("fuseserver_readdir\n");
 
- if(!yfs->isdir(inum)){
+  if(!yfs->isdir(inum)){
     fuse_reply_err(req, ENOTDIR);
     return;
   }
 
+  cout << "fuseserver_readdir is a dir: " << ino << endl;
+
   memset(&b, 0, sizeof(b));
 
 
-   // fill in the b data structure using dirbuf_add
+  string value;
+  yfs->get_(ino, value);
 
+  if(!value.empty()) {
 
-   reply_buf_limited(req, b.p, b.size, off, size);
-   free(b.p);
- }
+    istringstream iss(value);
+    string file_entry;
+    while (getline(iss, file_entry, ';'))
+    {
+      int l = file_entry.find(".");
+      string file_name_;
+      char file_name[128];
+      file_name_ = file_entry.substr(0, l);
+      
+      strcpy(file_name, file_name_.c_str());
+
+      fuse_ino_t inum_ = stoull(file_entry.substr(l+1));
+
+      cout << "ccfilename: " << file_name << " inum: " << inum_ << endl;
+
+      dirbuf_add(&b, file_name, inum_);
+    }
+  }
+  else
+    cout << "empty readdir" << endl;
+
+  reply_buf_limited(req, b.p, b.size, off, size);
+  free(b.p);
+}
 
 
 void
 fuseserver_open(fuse_req_t req, fuse_ino_t ino,
      struct fuse_file_info *fi)
 {
-  // You fill this in
-#if 0
-  fuse_reply_open(req, fi);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
+  cout << "fuseopen. ino: " << ino << endl;
+
+  if(yfs->open_file(ino)){
+    //fi->fh = ino;
+
+    cout << "fuseopen open file success. ino: " << ino << endl;
+
+    fuse_reply_open(req, fi);
+  }
+  else
+    fuse_reply_err(req, EIO);
 }
 
 void
@@ -254,7 +358,7 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 void
 fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-
+  cout << "unlink called." << endl;
   // You fill this in
   // Success:	fuse_reply_err(req, 0);
   // Not found:	fuse_reply_err(req, ENOENT);
