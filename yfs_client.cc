@@ -191,11 +191,11 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   if(createfile)
     do {
       inum_ = mt_rand_gen();
-    } while(isfile(inum_));
+    } while(!isfile(inum_));
   else
    do {
      inum_ = mt_rand_gen();
-   } while(!isfile(inum_));
+   } while(isfile(inum_));
 
   // create a new entry for file
   ec->put(inum_, "");
@@ -307,4 +307,27 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
   buf = read_content;
 
   return yfs_client::OK;
+}
+
+bool
+yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_file,
+                        const char* filename) {
+  string parent_content;
+  int index;
+
+  if(ec->get(inum_parent, parent_content) == yfs_client::NOENT) return false;
+
+  string to_remove(string(filename) + "." + to_string(inum_file) + ";");
+
+  index = parent_content.find(to_remove);
+
+  if(index == string::npos) return false;
+
+  parent_content.erase(index, to_remove.size());
+
+  if(ec->put(inum_parent, parent_content) != yfs_client::OK) return false;
+
+  if(ec->remove(inum_file) != yfs_client::OK) return false;
+
+  return true;
 }

@@ -349,7 +349,6 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 
   unsigned long long ino;
   struct stat attr;
-  yfs_client::status ret;
   int isfile = 0;
 
   struct fuse_entry_param e;
@@ -357,7 +356,7 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 
   memset(&attr, 0, sizeof(attr));
 
-  if(ret = yfs->createhelper(parent, name, &ino, isfile) != yfs_client::OK)
+  if(yfs->createhelper(parent, name, &ino, isfile) != yfs_client::OK)
   {
     fuse_reply_err(req, ENOSYS);
     return;
@@ -381,10 +380,18 @@ void
 fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   cout << "unlink called." << endl;
-  // You fill this in
-  // Success:	fuse_reply_err(req, 0);
-  // Not found:	fuse_reply_err(req, ENOENT);
-  fuse_reply_err(req, ENOSYS);
+  unsigned long long inum;
+  int size;
+  bool ret = false;
+
+  if(yfs->lookup(parent, name, &inum, &size)) {
+    ret = yfs->remove_file(parent, inum, name);
+  }
+
+  if(ret)
+    fuse_reply_err(req, 0);
+  else
+    fuse_reply_err(req, ENOENT);
 }
 
 void

@@ -51,7 +51,8 @@
   bool open_file(unsigned long long);
   int get_(unsigned long long , std::string &);
   int write_file(unsigned long long, const char*, size_t, off_t, bool);
-  int read_file(unsigned long long, size_t, off_t, std::string &);
+  int read_file(unsigned long long, size_t, off_t, std::string &); 
+  bool remove_file(unsigned long long, unsigned long long, const char*);
 };
 
 #endif 

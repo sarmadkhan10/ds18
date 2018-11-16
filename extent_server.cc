@@ -30,7 +30,6 @@ extent_server::extent_server() {
 
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
-  cout << "put: " << buf << endl;
   // store the file/dir content
   file_storage[id] = buf;
 
@@ -43,8 +42,6 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 
   file_attr[id] = new_attr;
 
-  cout << "put2: " << buf.size();
-
   return extent_protocol::OK;
 }
 
@@ -56,6 +53,16 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
     buf = file_storage[id];
 
     ret_val = extent_protocol::OK;
+  }
+
+  if(ret_val == extent_protocol::OK) {
+    assert(file_attr.find(id) != file_attr.end());
+
+    extent_protocol::attr attr = file_attr[id];
+
+    attr.atime = std::time(0);
+
+    file_attr[id] = attr;
   }
 
   return ret_val;
