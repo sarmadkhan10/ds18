@@ -166,10 +166,11 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
   unsigned long long ino;
   struct stat attr;
   yfs_client::status ret;
+  int isfile = 1;
 
   memset(&attr, 0, sizeof(attr));
 
-  ret = yfs->createhelper(parent, name, &ino); 
+  ret = yfs->createhelper(parent, name, &ino, isfile); 
 
   attr.st_ino = ino;
   attr.st_mode = S_IFREG | 0666;
@@ -346,13 +347,34 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
      mode_t mode)
 {
 
-  // You fill this in
-#if 0
+  unsigned long long ino;
+  struct stat attr;
+  yfs_client::status ret;
+  int isfile = 0;
+
   struct fuse_entry_param e;
+  cout << "\n make dir called";
+
+  memset(&attr, 0, sizeof(attr));
+
+  if(ret = yfs->createhelper(parent, name, &ino, isfile) != yfs_client::OK)
+  {
+    fuse_reply_err(req, ENOSYS);
+    return;
+  }
+
+  attr.st_ino = ino;
+  attr.st_mode = S_IFDIR | 0777;
+  attr.st_nlink = 2;
+
+  e.ino = ino;
+  e.attr = attr;
+  e.attr_timeout = 0.0;
+  e.entry_timeout = 0.0;
+  e.generation = 1;
+
+  cout << "\n returned from MKDIR";
   fuse_reply_entry(req, &e);
-#else
-  fuse_reply_err(req, ENOSYS);
-#endif
 }
 
 void

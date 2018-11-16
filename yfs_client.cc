@@ -160,7 +160,7 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
  *@param fuse_entry_param entire attribute   
  */
 yfs_client::status
-yfs_client::createhelper(unsigned long long parent, const char *name, unsigned long long *ino_new)
+yfs_client::createhelper(unsigned long long parent, const char *name, unsigned long long *ino_new, int createfile)
 {
   printf("\ncreatehelper ");
   std::cout << "parent " << parent << " name " << name << endl;
@@ -188,9 +188,14 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   cout << "createhelper " << parent << " " << "get value done." << endl;
 
   //genereate a 64 bit random number and check if has 31st bit one (recognising a file)
-  do {
-    inum_ = mt_rand_gen();
-  } while(!isfile(inum_));
+  if(createfile)
+    do {
+      inum_ = mt_rand_gen();
+    } while(isfile(inum_));
+  else
+   do {
+     inum_ = mt_rand_gen();
+   } while(!isfile(inum_));
 
   // create a new entry for file
   ec->put(inum_, "");
