@@ -390,8 +390,10 @@ fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 
   if(ret)
     fuse_reply_err(req, 0);
-  else
+  else {
+    cout << "unlink exit fail" << endl;
     fuse_reply_err(req, ENOENT);
+  }
 }
 
 void

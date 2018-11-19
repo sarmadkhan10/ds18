@@ -21,7 +21,7 @@ class lock{
   public:
     lock();
 
-    int get_lock_id() {return this->lock_id;}
+    lock_protocol::lockid_t get_lock_id() {return this->lock_id;}
     int get_state() {return this->state;}
     int get_lock_waiting() {return this->lock_waiting;}
 

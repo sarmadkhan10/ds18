@@ -244,7 +244,6 @@ yfs_client::open_file(unsigned long long ino)
   }
 }
 int yfs_client::get_(unsigned long long inum_, string &buf){
-
   return ec->get(inum_, buf);
 }
 
@@ -306,6 +305,8 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
 bool
 yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_file,
                         const char* filename) {
+  cout << "remove_file enter: " << inum_parent << " " << inum_file << endl;
+
   string parent_content;
   int index;
 
@@ -347,6 +348,8 @@ yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_
 
   assert(lc->release(inum_file) == lock_protocol::OK);
   assert(lc->release(inum_parent) == lock_protocol::OK);
+
+  cout << "remove_file exit: " << inum_parent << " " << inum_file << endl;
 
   return true;
 }
