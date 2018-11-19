@@ -20,6 +20,7 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
   assert(pthread_mutex_init(&m_, 0) == 0);
+  lc = new lock_client(lock_dst);
 
 }
 
@@ -180,6 +181,9 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
 
   cout << "createhelper " << parent << " " << name << "not already present." << endl;
   
+
+  assert(lc->acquire(parent) == lock_protocol::OK);
+    
   if(ec->get(parent, value) != yfs_client::OK) {
     cout << "createhelper " << parent << " does not exist." << endl;
     return yfs_client::NOENT;
@@ -207,24 +211,14 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   value += out.str();
   ec->put(parent, value);
 
+  assert(lc->release(parent) == lock_protocol::OK);
+
   cout << "createhelper successful exit." << endl;
 
   return yfs_client::OK;
-//include based on test results
-#if 0 
-  
-  getattr(&a);
-  
-  e->st_mode = S_IFREG | 0666;
-  e->st_nlink = 1;
-  e->st_atime = a.atime;
-  e->st_mtime = a.mtime;
-  e->st_ctime = a.ctime;
-  e->st_size = a.size ;
-
-#endif
 
 }
+
 /*
  *fuse open invokes this 
  *
@@ -241,25 +235,13 @@ yfs_client::open_file(unsigned long long ino)
   ostringstream out;
   printf("\n on open file client");
 
+
   // if file is not present, return false
-  if(ec->get(ino, value) != yfs_client::OK) return false;
-  else return true;
-
-//include based on test results
-#if 0 
-  
-  getattr(&a);
-  
-  e->st_mode = S_IFREG | 0666;
-  e->st_nlink = 1;
-  e->st_atime = a.atime;
-  e->st_mtime = a.mtime;
-  e->st_ctime = a.ctime;
-  e->st_size = a.size ;
-
-#endif
-
-  return true;
+  if(ec->get(ino, value) != yfs_client::OK) {
+    return false;
+  } else {
+    return true;
+  }
 }
 int yfs_client::get_(unsigned long long inum_, string &buf){
 
@@ -272,8 +254,13 @@ yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off
 
   // get the prev file content (if it exists)
   string prev_val;
-  if(ec->get(inum, prev_val) == yfs_client::NOENT) return yfs_client::NOENT;
+  int ret;
 
+  assert(lc->acquire(inum) == lock_protocol::OK);
+  if(ec->get(inum, prev_val) == yfs_client::NOENT) {
+    assert(lc->release(inum) == lock_protocol::OK);
+    return yfs_client::NOENT;
+  }
   assert(offset <= prev_val.size());
 
   // construct the new content of the file
@@ -285,7 +272,9 @@ yfs_client::write_file(unsigned long long inum, const char* buf, size_t len, off
   } else
     new_val = prev_val.replace(offset, len, string(buf, len));
 
-  return ec->put(inum, new_val);
+  ret = ec->put(inum, new_val);
+  assert(lc->release(inum) == lock_protocol::OK);
+  return ret;
 }
 
 // reads from a file if it exists
@@ -293,8 +282,12 @@ int
 yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string &buf) {
   // get the file content (if it exists)
   string file_content;
-  if(ec->get(inum, file_content) == yfs_client::NOENT) return yfs_client::NOENT;
-
+  assert(lc->acquire(inum) == lock_protocol::OK);
+  if(ec->get(inum, file_content) == yfs_client::NOENT){
+    assert(lc->release(inum) == lock_protocol::OK);
+    return yfs_client::NOENT;
+  }
+  assert(lc->release(inum) == lock_protocol::OK);
   // read file
   string read_content = file_content.substr(offset, len);
 
@@ -306,6 +299,7 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
 
   buf = read_content;
 
+
   return yfs_client::OK;
 }
 
@@ -315,19 +309,44 @@ yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_
   string parent_content;
   int index;
 
-  if(ec->get(inum_parent, parent_content) == yfs_client::NOENT) return false;
+  assert(lc->acquire(inum_file) == lock_protocol::OK);
+  assert(lc->acquire(inum_parent) == lock_protocol::OK);
+
+  if(ec->get(inum_parent, parent_content) == yfs_client::NOENT) {
+    assert(lc->release(inum_file) == lock_protocol::OK);
+    assert(lc->release(inum_parent) == lock_protocol::OK);
+    return false;
+  }
+
 
   string to_remove(string(filename) + "." + to_string(inum_file) + ";");
 
   index = parent_content.find(to_remove);
 
-  if(index == string::npos) return false;
+  if(index == string::npos) {
+    assert(lc->release(inum_file) == lock_protocol::OK);
+    assert(lc->release(inum_parent) == lock_protocol::OK);
+    return false;
+  }
+
 
   parent_content.erase(index, to_remove.size());
 
-  if(ec->put(inum_parent, parent_content) != yfs_client::OK) return false;
+  if(ec->put(inum_parent, parent_content) != yfs_client::OK) {
+    assert(lc->release(inum_file) == lock_protocol::OK);
+    assert(lc->release(inum_parent) == lock_protocol::OK);
+    return false;
+  }
 
-  if(ec->remove(inum_file) != yfs_client::OK) return false;
+
+  if(ec->remove(inum_file) != yfs_client::OK){
+    assert(lc->release(inum_file) == lock_protocol::OK);
+    assert(lc->release(inum_parent) == lock_protocol::OK);
+    return false;
+  }
+
+  assert(lc->release(inum_file) == lock_protocol::OK);
+  assert(lc->release(inum_parent) == lock_protocol::OK);
 
   return true;
 }
