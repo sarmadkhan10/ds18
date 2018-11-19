@@ -191,6 +191,28 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
 
   cout << "createhelper " << parent << " " << "get value done." << endl;
 
+  string to_find(string(name) + ".");
+
+  // check if the file name already exists. if it does, return its inum
+  int index = value.find(to_find);
+
+  if(index != string::npos) {
+    // get inum
+    int index_dot = value.find(".", index);
+    int index_sem = value.find(";", index);
+    
+    int len = (index_sem - index_dot) - 1;
+
+    assert(len > 0);
+
+    string old_inum = value.substr(index_dot+1, len);
+
+    *ino_new = stoull(old_inum);
+
+    assert(lc->release(parent) == lock_protocol::OK);
+    return yfs_client::OK;
+  }
+
   //genereate a 64 bit random number and check if has 31st bit one (recognising a file)
   if(createfile)
     do {
@@ -305,20 +327,17 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
 bool
 yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_file,
                         const char* filename) {
-  cout << "remove_file enter: " << inum_parent << " " << inum_file << endl;
-
   string parent_content;
   int index;
 
-  assert(lc->acquire(inum_file) == lock_protocol::OK);
   assert(lc->acquire(inum_parent) == lock_protocol::OK);
+  assert(lc->acquire(inum_file) == lock_protocol::OK);
 
-  if(ec->get(inum_parent, parent_content) == yfs_client::NOENT) {
+  if(ec->get(inum_parent, parent_content) != yfs_client::OK) {
     assert(lc->release(inum_file) == lock_protocol::OK);
     assert(lc->release(inum_parent) == lock_protocol::OK);
     return false;
   }
-
 
   string to_remove(string(filename) + "." + to_string(inum_file) + ";");
 
@@ -329,7 +348,6 @@ yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_
     assert(lc->release(inum_parent) == lock_protocol::OK);
     return false;
   }
-
 
   parent_content.erase(index, to_remove.size());
 
@@ -348,8 +366,6 @@ yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_
 
   assert(lc->release(inum_file) == lock_protocol::OK);
   assert(lc->release(inum_parent) == lock_protocol::OK);
-
-  cout << "remove_file exit: " << inum_parent << " " << inum_file << endl;
 
   return true;
 }
