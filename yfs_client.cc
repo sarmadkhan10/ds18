@@ -131,7 +131,9 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
 
   if(value.empty()) return false;
 
-  loc = value.find(name, 0);
+  string to_find(string(name) + '.');
+
+  loc = value.find(to_find, 0);
   if(loc != string::npos)
     inum = stoull(strtok(&value[value.find(".", loc+1)+1], ";"));
   else
@@ -341,6 +343,8 @@ yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_
 
   string to_remove(string(filename) + "." + to_string(inum_file) + ";");
 
+  cout << "to remove: " << to_remove << endl; 
+
   index = parent_content.find(to_remove);
 
   if(index == string::npos) {
@@ -349,7 +353,12 @@ yfs_client::remove_file(unsigned long long inum_parent, unsigned long long inum_
     return false;
   }
 
+  cout << "parent content before: " << parent_content << endl;
+
   parent_content.erase(index, to_remove.size());
+
+
+  cout << "parent content after: " << parent_content << endl;
 
   if(ec->put(inum_parent, parent_content) != yfs_client::OK) {
     assert(lc->release(inum_file) == lock_protocol::OK);
