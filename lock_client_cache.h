@@ -75,14 +75,40 @@ class lock_client_cache : public lock_client {
   int rlock_port;
   std::string hostname;
   std::string id;
-
- public:
+  public:
+  enum lock_state{
+    NONE,
+    FREE ,
+    LOCKED,
+    ACQUIRING,
+    RELEASING
+  };
   static int last_port;
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
   virtual ~lock_client_cache() {};
   lock_protocol::status acquire(lock_protocol::lockid_t);
+  void revoke(lock_protocol::lockid_t);
+  void retry(lock_protocol::lockid_t );
   virtual lock_protocol::status release(lock_protocol::lockid_t);
   void releaser();
+};
+class cached_lock
+{
+
+ lock_protocol::lockid_t lid;
+  
+ public:
+
+  pthread_mutex_t lock_mutex;
+  pthread_cond_t release_wait;
+ 
+  lock_client_cache::lock_state state;
+
+  cached_lock(lock_protocol::lockid_t);
+
+  lock_protocol::lockid_t get_lid(){return lid;}
+  lock_client_cache::lock_state get_state(){return state;}
+  
 };
 #endif
 
