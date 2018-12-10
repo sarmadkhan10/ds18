@@ -95,9 +95,9 @@ class lock_client_cache : public lock_client {
 class cached_lock
 {
 
+ public:
  lock_protocol::lockid_t lid;
   
- public:
 
   pthread_mutex_t lock_mutex;
   pthread_cond_t release_wait;

@@ -81,6 +81,8 @@ lock_client_cache::releaser()
   // freed locks that have been revoked by the server, so that it can
   // send a release RPC.
 
+  int r;
+
   lock_protocol::status ret; 
 	std::list<lock_protocol::lockid_t>::iterator it;
 	std::vector<cached_lock>::iterator iter;
@@ -103,7 +105,7 @@ lock_client_cache::releaser()
       if((*iter).state == FREE){
         revoke_list.erase(it);
         (*iter).state = NONE;
-        // RELEASE_RPC;
+        ret = cl->call(lock_protocol::release, lock_client_cache::id, (*iter).lid, r);
         assert(ret == lock_protocol::OK);
         assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
         //delete the object?
@@ -175,7 +177,8 @@ lock_client_cache::retry(lock_protocol::lockid_t lid)
 lock_protocol::status
 lock_client_cache::acquire(lock_protocol::lockid_t lid)
 {
- lock_protocol::status ret; 
+  lock_protocol::status ret; 
+  int r;
   
   while(1)
   {
@@ -192,11 +195,11 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       
       assert(pthread_mutex_lock(&(new_lock.lock_mutex)) == 0);
       assert(pthread_mutex_unlock(&cache_mutex) == 0);
-      //ACQUIRE_RPC;
+      ret = cl->call(lock_protocol::acquire, lock_client_cache::id, lid, r);
       while(ret == lock_protocol::RETRY){
         //assuming the lock's mutex is released within the cond_wait
         pthread_cond_wait(&((*iter).release_wait), &((*iter).lock_mutex));
-        //ACQUIRE_RPC;
+        ret = cl->call(lock_protocol::acquire, lock_client_cache::id, lid, r);
         if(ret == lock_protocol::OK){
           iter = find_lock(lid);
           (*iter).state = LOCKED;

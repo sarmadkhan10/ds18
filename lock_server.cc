@@ -18,6 +18,7 @@ lock::lock():
 {
 }
 
+
 lock *get_lock(lock_protocol::lockid_t lid)
 {
   for(vector<lock *>::iterator lock_it = list_locks.begin();
