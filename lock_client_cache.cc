@@ -153,9 +153,7 @@ lock_client_cache::retry(lock_protocol::lockid_t lid)
 
   iter = find_lock(lid);
 
-   if(ret == lock_protocol::OK){
-      pthread_cond_signal(&((*iter).revoke_wait));
-   }
+  pthread_cond_signal(&((*iter).revoke_wait));
 }
 /*
 
