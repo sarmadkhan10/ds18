@@ -100,7 +100,7 @@ class cached_lock
   
 
   pthread_mutex_t lock_mutex;
-  pthread_cond_t release_wait;
+  pthread_cond_t revoke_wait;
  
   lock_client_cache::lock_state state;
 

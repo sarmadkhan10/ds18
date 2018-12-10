@@ -11,12 +11,13 @@ static std::vector <cached_lock> cached_locks;
 static std::list <lock_protocol::lockid_t> revoke_list;
 
 static pthread_mutex_t cache_mutex;
+pthread_cond_t release_wait;
 
 
 cached_lock::cached_lock(lock_protocol::lockid_t lid_)
 {
   assert(pthread_mutex_init(&lock_mutex, NULL) == 0);
-  assert(pthread_cond_init(&release_wait, NULL) == 0);
+  assert(pthread_cond_init(&revoke_wait, NULL) == 0);
   lid = lid_;
 }
 
@@ -76,11 +77,6 @@ find_lock(lock_protocol::lockid_t lid)
 void
 lock_client_cache::releaser()
 {
-
-  // This method should be a continuous loop, waiting to be notified of
-  // freed locks that have been revoked by the server, so that it can
-  // send a release RPC.
-
   int r;
 
   lock_protocol::status ret; 
@@ -116,7 +112,7 @@ lock_client_cache::releaser()
     }
 
   //if list empty sleep, only revoker should wake it up
-  pthread_cond_wait(&((*iter).release_wait), &cache_mutex);
+  pthread_cond_wait(&release_wait, &cache_mutex);
   }
 }
 /*
@@ -142,7 +138,7 @@ lock_client_cache::revoke(lock_protocol::lockid_t lid)
   
   //threads waiting before the revoke called will still wake up 
   //releaser thread will also wake up
-  pthread_cond_signal(&((*iter).release_wait));
+  pthread_cond_signal(&((*iter).revoke_wait));
 
   assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
   assert(pthread_mutex_unlock(&cache_mutex) == 0);
@@ -158,7 +154,7 @@ lock_client_cache::retry(lock_protocol::lockid_t lid)
   iter = find_lock(lid);
 
    if(ret == lock_protocol::OK){
-      pthread_cond_signal(&((*iter).release_wait));
+      pthread_cond_signal(&((*iter).revoke_wait));
    }
 }
 /*
@@ -198,7 +194,7 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       ret = cl->call(lock_protocol::acquire, lock_client_cache::id, lid, r);
       while(ret == lock_protocol::RETRY){
         //assuming the lock's mutex is released within the cond_wait
-        pthread_cond_wait(&((*iter).release_wait), &((*iter).lock_mutex));
+        pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
         ret = cl->call(lock_protocol::acquire, lock_client_cache::id, lid, r);
         if(ret == lock_protocol::OK){
           iter = find_lock(lid);
@@ -224,10 +220,10 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       else if(it != revoke_list.end())
         continue;
       else if((*iter).state ==  LOCKED){
-        pthread_cond_wait(&((*iter).release_wait), &((*iter).lock_mutex));
+        pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
       }
       else if((*iter).state ==  ACQUIRING){
-        pthread_cond_wait(&((*iter).release_wait), &((*iter).lock_mutex));
+        pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
       }
       else if((*iter).state ==  RELEASING){
         continue;
@@ -254,7 +250,7 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
   assert(pthread_mutex_lock(&cache_mutex) == 0);
   //assuming ordering is maintained, threads waiting before the revoke will still 
   //get the lock
-  pthread_cond_signal(&((*iter).release_wait));
+  pthread_cond_signal(&release_wait);
 
   return lock_protocol::OK;
 }
