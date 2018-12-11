@@ -7,11 +7,7 @@
 #include <iostream>
 #include <stdio.h>
 
-static std::vector <cached_lock> cached_locks;
-static std::list <lock_protocol::lockid_t> revoke_list;
-
-static pthread_mutex_t cache_mutex;
-pthread_cond_t release_wait;
+using namespace std;
 
 
 cached_lock::cached_lock(lock_protocol::lockid_t lid_)
@@ -19,6 +15,7 @@ cached_lock::cached_lock(lock_protocol::lockid_t lid_)
   assert(pthread_mutex_init(&lock_mutex, NULL) == 0);
   assert(pthread_cond_init(&revoke_wait, NULL) == 0);
   lid = lid_;
+  state = lock_client_cache::NONE;
 }
 
 static void *
@@ -35,6 +32,9 @@ lock_client_cache::lock_client_cache(std::string xdst,
 				     class lock_release_user *_lu)
   : lock_client(xdst), lu(_lu)
 {
+  assert(pthread_cond_init(&release_wait, NULL) == 0);
+  assert(pthread_mutex_init(&cache_mutex, NULL) == 0);
+
   srand(time(NULL)^last_port);
   rlock_port = ((rand()%32000) | (0x1 << 10));
   const char *hname;
@@ -46,11 +46,12 @@ lock_client_cache::lock_client_cache(std::string xdst,
   last_port = rlock_port;
   rpcs *rlsrpc = new rpcs(rlock_port);
   /* register RPC handlers with rlsrpc */
+  rlsrpc->reg(rlock_protocol::revoke, this, &lock_client_cache::revoke);
+  rlsrpc->reg(rlock_protocol::retry, this, &lock_client_cache::retry);
+
   pthread_t th;
   int r = pthread_create(&th, NULL, &releasethread, (void *) this);
   assert (r == 0);
-
-  assert(pthread_mutex_init(&cache_mutex, NULL) == 0);
 }
 /*
 * finds the lock object to be found out in the cached_locks list
@@ -60,7 +61,7 @@ lock_client_cache::lock_client_cache(std::string xdst,
 *
 */
 std::vector<cached_lock>::iterator
-find_lock(lock_protocol::lockid_t lid)
+lock_client_cache::find_lock(lock_protocol::lockid_t lid)
 {
   std::vector<cached_lock>::iterator it;
 
@@ -82,14 +83,11 @@ lock_client_cache::releaser()
   lock_protocol::status ret; 
 	std::list<lock_protocol::lockid_t>::iterator it;
 	std::vector<cached_lock>::iterator iter;
-  
 
   assert(pthread_mutex_lock(&cache_mutex) == 0);
 
-  while(1)
-  {
-    
-
+  while(1) {
+    cout << "releaser enter" << endl;
   	for (it = revoke_list.begin(); it != revoke_list.end(); ) {
 
       iter = find_lock((*it));
@@ -99,20 +97,30 @@ lock_client_cache::releaser()
       assert(iter != cached_locks.end());
 
       if((*iter).state == FREE){
-        revoke_list.erase(it);
-        (*iter).state = NONE;
-        ret = cl->call(lock_protocol::release, lock_client_cache::id, (*iter).lid, r);
+        it = revoke_list.erase(it);
+        (*iter).state = RELEASING;
+
+        assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
+
+        ret = cl->call(lock_protocol::release, id, (*iter).get_lid(), r);
         assert(ret == lock_protocol::OK);
-        assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
+
+        // set state to NONE
+        assert(pthread_mutex_lock(&((*iter).lock_mutex)) == 0);
+        (*iter).state = NONE;
+
+        cout << "releaser released" << endl;
         //delete the object?
-      } else{
-        it++;
+      } else {
         assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
-        }
+        it++;
+      }
     }
 
-  //if list empty sleep, only revoker should wake it up
-  pthread_cond_wait(&release_wait, &cache_mutex);
+    //if list empty sleep, only revoker should wake it up
+    pthread_cond_wait(&release_wait, &cache_mutex);
+
+    cout << "releaser wakes up" << endl;
   }
 }
 /*
@@ -121,9 +129,10 @@ lock_client_cache::releaser()
 * signals releaser, other threads waiting before 
 *
 */
-void
-lock_client_cache::revoke(lock_protocol::lockid_t lid)
+lock_protocol::status
+lock_client_cache::revoke(lock_protocol::lockid_t lid, int &r)
 {
+  cout << "revoke enter: " << lid << endl;
 	std::vector<cached_lock>::iterator iter;
 
   assert(pthread_mutex_lock(&cache_mutex) == 0);
@@ -143,19 +152,25 @@ lock_client_cache::revoke(lock_protocol::lockid_t lid)
   assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
   assert(pthread_mutex_unlock(&cache_mutex) == 0);
 
-}
-void 
-lock_client_cache::retry(lock_protocol::lockid_t lid)
-{
+  cout << "revoke exit: " << lid << endl;
 
+  return lock_protocol::OK;
+}
+
+lock_protocol::status 
+lock_client_cache::retry(lock_protocol::lockid_t lid, int &r)
+{
+  cout << "retry enter: " << lid << endl;
   lock_protocol::status ret ; 
   std::vector<cached_lock>::iterator iter;
 
   iter = find_lock(lid);
 
-   if(ret == lock_protocol::OK){
-      pthread_cond_signal(&((*iter).revoke_wait));
-   }
+  pthread_cond_signal(&((*iter).revoke_wait));
+
+  cout << "retry exit: " << lid << endl;
+
+  return lock_protocol::OK;
 }
 /*
 
@@ -173,69 +188,101 @@ lock_client_cache::retry(lock_protocol::lockid_t lid)
 lock_protocol::status
 lock_client_cache::acquire(lock_protocol::lockid_t lid)
 {
+  cout << "lock_client_cache acquire enter. lid: " << lid << endl;
   lock_protocol::status ret; 
   int r;
   
-  while(1)
-  {
-    assert(pthread_mutex_lock(&cache_mutex) == 0); 
-    //search LOCK_LIST to find the lock
+  while(1) {
+    assert(pthread_mutex_lock(&cache_mutex) == 0);
+
+    //search cached_locks to find the lock
 	  std::vector<cached_lock>::iterator iter;
     iter = find_lock(lid);
-    if(iter == cached_locks.end() || (*iter).state == NONE) 
-    {
+
+    // if the cached_lock doesn't exist
+    if(iter == cached_locks.end()) {
       //create a new lock and push it to cached_locks list
       cached_lock new_lock(lid);
-      new_lock.state = ACQUIRING;
       cached_locks.push_back(new_lock);
-      
-      assert(pthread_mutex_lock(&(new_lock.lock_mutex)) == 0);
+
+      iter = find_lock(lid);
+    }
+
+    if((*iter).state == NONE) {
+      assert(pthread_mutex_lock(&((*iter).lock_mutex)) == 0);
+
+      (*iter).state = ACQUIRING;
+
+      // while holding lock_mutex. deadlock?
       assert(pthread_mutex_unlock(&cache_mutex) == 0);
-      ret = cl->call(lock_protocol::acquire, lock_client_cache::id, lid, r);
-      while(ret == lock_protocol::RETRY){
+
+      ret = cl->call(lock_protocol::acquire, id, lid, r);
+
+      cout << "ret acquire rpc: " << ret << endl;
+      while(ret == lock_protocol::RETRY) {
+        cout << "will retry later: " << lid << endl;
         //assuming the lock's mutex is released within the cond_wait
         pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
-        ret = cl->call(lock_protocol::acquire, lock_client_cache::id, lid, r);
-        if(ret == lock_protocol::OK){
-          iter = find_lock(lid);
-          (*iter).state = LOCKED;
-          assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
-          return lock_protocol::OK;
+        cout << "retrying: " << lid << endl;
+        ret = cl->call(lock_protocol::acquire, id, lid, r);
+
+        if(ret == lock_protocol::OK) {
+          cout << "retry success: " << lid << endl;
+          break;
         }
       }
-      if(ret == lock_protocol::OK){
-        iter = find_lock(lid);
-        (*iter).state = LOCKED;
-        return lock_protocol::OK;
-      }
-    } else{
+
+      assert(ret == lock_protocol::OK);
+
+      (*iter).state = LOCKED;
+      assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
+      cout << "got lock" << endl;
+      return lock_protocol::OK;
+
+    } else {
       assert(pthread_mutex_lock(&((*iter).lock_mutex)) == 0);
-      auto it = std::find(revoke_list.begin(), revoke_list.end(), lid); //unnecessary
-      if(it == revoke_list.end() && (*iter).state == FREE)
-      {
+
+      std::list<lock_protocol::lockid_t>::iterator it;
+      it = std::find(revoke_list.begin(), revoke_list.end(), lid); //unnecessary
+
+      if (it != revoke_list.end()) {
+        cout << "blah blah blah blah" << endl;
+      }
+
+      if(it == revoke_list.end() && (*iter).state == FREE) {
         (*iter).state = LOCKED;
         assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
+        assert(pthread_mutex_unlock(&cache_mutex) == 0);
         return lock_protocol::OK;
       }
-      else if(it != revoke_list.end())
+      else if(it != revoke_list.end()) {
+        assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
+        assert(pthread_mutex_unlock(&cache_mutex) == 0);
         continue;
-      else if((*iter).state ==  LOCKED){
+      }
+      else if((*iter).state ==  LOCKED) {
+        assert(pthread_mutex_unlock(&cache_mutex) == 0);
         pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
       }
-      else if((*iter).state ==  ACQUIRING){
+      else if((*iter).state ==  ACQUIRING) {
+        assert(pthread_mutex_unlock(&cache_mutex) == 0);
         pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
       }
-      else if((*iter).state ==  RELEASING){
+      else if((*iter).state ==  RELEASING) {
+        assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
+        assert(pthread_mutex_unlock(&cache_mutex) == 0);
         continue;
       }
     }
   }
- // return lock_protocol::RPCERR;
+
+  cout << "lock_client_cache acquire exit" << endl;
 }
 
 lock_protocol::status
 lock_client_cache::release(lock_protocol::lockid_t lid)
 {
+  cout << "lock_client_cache release enter" << endl;
 	std::vector<cached_lock>::iterator iter;
 
   assert(pthread_mutex_lock(&cache_mutex) == 0);
@@ -245,12 +292,17 @@ lock_client_cache::release(lock_protocol::lockid_t lid)
   assert(iter != cached_locks.end());
   assert(pthread_mutex_lock(&((*iter).lock_mutex)) == 0);
   (*iter).state = FREE;
-  assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
 
-  assert(pthread_mutex_lock(&cache_mutex) == 0);
   //assuming ordering is maintained, threads waiting before the revoke will still 
   //get the lock
   pthread_cond_signal(&release_wait);
+  assert(pthread_mutex_unlock(&cache_mutex) == 0);
+
+  pthread_cond_signal(&((*iter).revoke_wait));
+
+  assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
+
+  cout << "lock_client_cache release exit" << endl;
 
   return lock_protocol::OK;
 }
