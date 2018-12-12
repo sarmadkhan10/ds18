@@ -20,7 +20,7 @@ class lock_server_cache {
  private:
 	std::map<lock_protocol::lockid_t, std::string> map_lock;
 	std::map<lock_protocol::lockid_t, std::vector<std::string>> map_retry;
-	std::map<lock_protocol::lockid_t, std::string> map_revoke;
+	std::map<lock_protocol::lockid_t, std::pair<std::string, bool>> map_revoke;
 	std::map<std::string, rpcc*> map_client;
 };
 

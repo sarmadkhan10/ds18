@@ -40,6 +40,8 @@ lock_server_cache::lock_server_cache()
   assert (r == 0);
   r = pthread_create(&th, NULL, &retrythread, (void *) this);
   assert (r == 0);
+
+  cout << "server starts" << endl;
 }
 
 void
@@ -49,42 +51,36 @@ lock_server_cache::revoker()
   // This method should be a continuous loop, that sends revoke
   // messages to lock holders whenever another client wants the
   // same lock
+  
+  std::map<lock_protocol::lockid_t, std::pair<std::string, bool>>::iterator iter;
 
   pthread_mutex_lock(&mutex_);
 
   while(1) {
+    for(iter = map_revoke.begin(); iter!= map_revoke.end(); iter++) {
+      // check if revoke has already been called
+      if(iter->second.second == false) {
+        iter->second.second = true;
+        lock_protocol::lockid_t rev_lid = iter->first;
+        string rev_cid = iter->second.first;
 
-    // if nothing to be done, wait
-    if(map_revoke.empty()) {
-      cout << "revoker sleeps" << endl;
-      pthread_cond_wait(&cond_revoke, &mutex_);
-      cout << "revoker wakes up" << endl;
+        //pthread_mutex_unlock(&mutex_);
+
+        assert(map_client.find(rev_cid) != map_client.end());
+
+        rpcc *cl = map_client[rev_cid];
+
+        int r;
+        int ret = cl->call(rlock_protocol::revoke, rev_lid, r);
+        assert (ret == lock_protocol::OK);
+
+        cout << "revoke rpc done: " << rev_lid << endl;
+
+        //pthread_mutex_lock(&mutex_);
+      }
     }
-    else {
-      map<lock_protocol::lockid_t, string>::iterator it;
-      it = map_revoke.begin();
 
-      lock_protocol::lockid_t rev_lid = it->first;
-      string rev_cid = it->second;
-
-      map_revoke.erase(it);
-
-      pthread_mutex_unlock(&mutex_);
-
-      assert(map_client.find(rev_cid) != map_client.end());
-
-      rpcc *cl = map_client[rev_cid];
-
-      cout << "doing revoke rpc: " << rev_lid << endl;
-
-      int r;
-      int ret = cl->call(rlock_protocol::revoke, rev_lid, r);
-      assert (ret == lock_protocol::OK);
-
-      cout << "revoke rpc done: " << rev_lid << endl;
-
-      pthread_mutex_lock(&mutex_);
-    }
+    pthread_cond_wait(&cond_revoke, &mutex_);
   }
 }
 
@@ -97,9 +93,9 @@ lock_server_cache::retryer()
   // to be released and then sending retry messages to those who
   // are waiting for it.
 
-  while(1) {
-    pthread_mutex_lock(&mutex_);
+  pthread_mutex_lock(&mutex_);
 
+  while(1) {
     if(map_retry.empty()) {
       pthread_cond_wait(&cond_retry, &mutex_);
     }
@@ -120,7 +116,10 @@ lock_server_cache::retryer()
 
         int r;
         assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
+        cout << "retry rpc success" << endl;
       }
+
+      pthread_mutex_lock(&mutex_);
     }
   }
 }
@@ -176,9 +175,14 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
         map_retry[lid] = new_retry_cid_list;
       }
 
+      // TODO: fix?
       map_retry.find(lid)->second.push_back(cid);
 
-      map_revoke[lid] = it->second;
+      // check if revoke rpc should be called or not
+      std::map<lock_protocol::lockid_t, std::pair<std::string, bool>>::iterator it_rev;
+      it_rev = map_revoke.find(lid);
+      if(it_rev == map_revoke.end())
+        map_revoke[lid] = make_pair(it->second, false);
 
       assert(pthread_mutex_unlock(&mutex_) == 0);
 
@@ -192,11 +196,17 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
 
 lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lockid_t lid, int &r)
 {
-  cout << "lock_server_cache release enter" << endl;
+  cout << "lock_server_cache release enter: " << cid << endl;
   pthread_mutex_lock(&mutex_);
 
   // remove client id
   map_lock[lid] = "";
+
+  // remove from map_revoke
+  std::map<lock_protocol::lockid_t, std::pair<std::string, bool>>::iterator it_rev;
+  it_rev = map_revoke.find(lid);
+  assert(it_rev != map_revoke.end());
+  map_revoke.erase(it_rev);
 
   pthread_mutex_unlock(&mutex_);
 

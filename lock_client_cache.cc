@@ -87,8 +87,8 @@ lock_client_cache::releaser()
   assert(pthread_mutex_lock(&cache_mutex) == 0);
 
   while(1) {
-    cout << "releaser enter" << endl;
   	for (it = revoke_list.begin(); it != revoke_list.end(); ) {
+      cout << "releaser starting to release" << endl;
 
       iter = find_lock((*it));
 
@@ -132,7 +132,7 @@ lock_client_cache::releaser()
 lock_protocol::status
 lock_client_cache::revoke(lock_protocol::lockid_t lid, int &r)
 {
-  cout << "revoke enter: " << lid << endl;
+  cout << "revoke rpc lid: " << lid << " cid: " << id << endl;
 	std::vector<cached_lock>::iterator iter;
 
   assert(pthread_mutex_lock(&cache_mutex) == 0);
@@ -152,23 +152,19 @@ lock_client_cache::revoke(lock_protocol::lockid_t lid, int &r)
   assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
   assert(pthread_mutex_unlock(&cache_mutex) == 0);
 
-  cout << "revoke exit: " << lid << endl;
-
   return lock_protocol::OK;
 }
 
 lock_protocol::status 
 lock_client_cache::retry(lock_protocol::lockid_t lid, int &r)
 {
-  cout << "retry enter: " << lid << endl;
+  //cout << "retry rpc lid: " << lid << endl;
   lock_protocol::status ret ; 
   std::vector<cached_lock>::iterator iter;
 
   iter = find_lock(lid);
 
   pthread_cond_signal(&((*iter).revoke_wait));
-
-  cout << "retry exit: " << lid << endl;
 
   return lock_protocol::OK;
 }
@@ -220,10 +216,8 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
 
       cout << "ret acquire rpc: " << ret << endl;
       while(ret == lock_protocol::RETRY) {
-        cout << "will retry later: " << lid << endl;
         //assuming the lock's mutex is released within the cond_wait
         pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
-        cout << "retrying: " << lid << endl;
         ret = cl->call(lock_protocol::acquire, id, lid, r);
 
         if(ret == lock_protocol::OK) {
@@ -245,11 +239,8 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       std::list<lock_protocol::lockid_t>::iterator it;
       it = std::find(revoke_list.begin(), revoke_list.end(), lid); //unnecessary
 
-      if (it != revoke_list.end()) {
-        cout << "blah blah blah blah" << endl;
-      }
-
       if(it == revoke_list.end() && (*iter).state == FREE) {
+        cout << "revoke list empty. lock free. got it" << endl;
         (*iter).state = LOCKED;
         assert(pthread_mutex_unlock(&((*iter).lock_mutex)) == 0);
         assert(pthread_mutex_unlock(&cache_mutex) == 0);
