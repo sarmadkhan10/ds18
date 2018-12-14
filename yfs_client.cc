@@ -11,6 +11,7 @@
 #include <random>
 #include <string>
 #include <sstream>
+#include "lock_client_cache.h"
 
 using namespace std;
 
@@ -20,7 +21,7 @@ yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
   ec = new extent_client(extent_dst);
   assert(pthread_mutex_init(&m_, 0) == 0);
-  lc = new lock_client(lock_dst);
+  lc = new lock_client_cache(lock_dst);
 
 }
 

@@ -11,7 +11,7 @@
 class lock_server_cache {
  public:
   lock_server_cache();
-  lock_protocol::status stat(lock_protocol::lockid_t, int &);
+  lock_protocol::status stat(int clt, lock_protocol::lockid_t, int &);
   void revoker();
   void retryer();
   lock_protocol::status acquire(std::string cid, lock_protocol::lockid_t lid, int &r);
