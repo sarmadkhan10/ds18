@@ -97,11 +97,8 @@ lock_server_cache::retryer()
 
   while(1) {
     while(map_retry.empty()) {
-      cout << "map retry empty" << endl;
       pthread_cond_wait(&cond_retry, &mutex_);
     }
-
-    cout << "retryer wakes" << endl;
 
     //assert(!map_retry.empty());
 
@@ -121,10 +118,7 @@ lock_server_cache::retryer()
 
       int r;
       assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
-      cout << "retry rpc success" << endl;
     }
-
-    cout << "all cids for a certain lid retry done" << endl;
 
     //pthread_mutex_lock(&mutex_);
   }
@@ -136,7 +130,6 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
 {
   cout << "lock_server_cache acquire enter" << endl;
   assert(pthread_mutex_lock(&mutex_) == 0);
-  cout << "got mutex" << endl;
 
   // add the client to map if seen for the first time
   if(map_client.find(cid) == map_client.end()) {
@@ -183,16 +176,6 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
         map_retry[lid] = new_retry_cid_list;
       }
 
-      // temp
-      std::vector<string> temp_vec = map_retry.find(lid)->second;
-      std::vector<std::string>::iterator itt;
-      for(itt = temp_vec.begin(); itt != temp_vec.end(); itt++) {
-        if((*itt).compare(cid) == 0) {
-          cout << "::::::: duplicate cid" << endl;
-        }
-      }
-      //
-
       // TODO: fix?
       map_retry.find(lid)->second.push_back(cid);
 
@@ -206,7 +189,6 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
 
       assert(pthread_mutex_unlock(&mutex_) == 0);
 
-      cout << "acquire: sending retry and exit" << endl;
       return lock_protocol::RETRY;
     }
   }
@@ -235,9 +217,7 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
   assert(it_rev != map_revoke.end());
   map_revoke.erase(it_rev);
 
-  cout << "release:: signaling retry" << endl;
   pthread_cond_signal(&cond_retry);
-  cout << "release:: signaling retry done" << endl;
 
   pthread_mutex_unlock(&mutex_);
 
