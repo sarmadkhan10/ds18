@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <time.h>
 
+using namespace std;
+
 // The calls assume that the caller holds a lock on the extent
 
 extent_client::extent_client(std::string dst)
@@ -23,7 +25,30 @@ extent_protocol::status
 extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
 {
   extent_protocol::status ret = extent_protocol::OK;
-  ret = cl->call(extent_protocol::get, eid, buf);
+
+  map<extent_protocol::extentid_t, cached_extent>::iterator it;
+  it = map_client_cache.find(eid);
+
+  // if the extent is cached, read that copy
+  if(it != map_client_cache.end()) {
+    // if the extent was previously removed
+    if(it->second.to_remove)
+      ret = extent_protocol::NOENT;
+    else {
+      buf = it->second.data;
+    }
+  }
+  else {
+    ret = cl->call(extent_protocol::get, eid, buf);
+
+    if(ret == extent_protocol::OK) {
+      struct cached_extent c_ext;
+      c_ext.data = buf;
+
+      map_client_cache[eid] = c_ext;
+    }
+  }
+
   return ret;
 }
 
@@ -39,19 +64,25 @@ extent_client::getattr(extent_protocol::extentid_t eid,
 extent_protocol::status
 extent_client::put(extent_protocol::extentid_t eid, std::string buf)
 {
-  extent_protocol::status ret = extent_protocol::OK;
-  int r;
-  ret = cl->call(extent_protocol::put, eid, buf, r);
-  return ret;
+  struct cached_extent c_ext;
+  c_ext.data = buf;
+  c_ext.dirty = true;
+
+  map_client_cache[eid] = c_ext;
+
+  return extent_protocol::OK;
 }
 
 extent_protocol::status
 extent_client::remove(extent_protocol::extentid_t eid)
 {
-  extent_protocol::status ret = extent_protocol::OK;
-  int r;
-  ret = cl->call(extent_protocol::remove, eid, r);
-  return ret;
+  struct cached_extent c_ext;
+  c_ext.to_remove = true;
+  c_ext.dirty = true;
+
+  map_client_cache[eid] = c_ext;
+  //ret = cl->call(extent_protocol::remove, eid, r);
+  return extent_protocol::OK;
 }
 
 
