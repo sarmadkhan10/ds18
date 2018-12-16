@@ -19,9 +19,10 @@ static std::mt19937_64 mt_rand_gen(time(0));
 
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
+  //class lock_release_user lru;
   ec = new extent_client(extent_dst);
   assert(pthread_mutex_init(&m_, 0) == 0);
-  lc = new lock_client_cache(lock_dst);
+  lc = new lock_client_cache(lock_dst, &lru);
 
 }
 

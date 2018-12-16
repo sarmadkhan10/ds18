@@ -10,6 +10,7 @@
 
 using namespace std;
 
+
 // The calls assume that the caller holds a lock on the extent
 
 extent_client::extent_client(std::string dst)
@@ -20,6 +21,7 @@ extent_client::extent_client(std::string dst)
   if (cl->bind() != 0) {
     printf("extent_client: bind failed\n");
   }
+  assert(pthread_mutex_init(&mutex, NULL) == 0);
 }
 
 extent_protocol::status
@@ -28,6 +30,9 @@ extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
   extent_protocol::status ret = extent_protocol::OK;
 
   map<extent_protocol::extentid_t, cached_extent>::iterator it;
+
+  //assert(pthread_mutex_lock(&mutex) == 0);
+
   it = map_client_cache.find(eid);
 
   // if the extent is cached, read that copy
@@ -52,6 +57,7 @@ extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
     }
   }
 
+  //assert(pthread_mutex_unlock(&mutex) == 0);
   return ret;
 }
 
@@ -62,6 +68,7 @@ extent_client::getattr(extent_protocol::extentid_t eid,
   extent_protocol::status ret = extent_protocol::OK;
 
   map<extent_protocol::extentid_t, cached_extent>::iterator it;
+  //assert(pthread_mutex_lock(&mutex) == 0);
   it = map_client_cache.find(eid);
 
   // if the extent is cached, read that copy
@@ -73,9 +80,9 @@ extent_client::getattr(extent_protocol::extentid_t eid,
   }
   else {
     ret = cl->call(extent_protocol::getattr, eid, attr);
-    assert("dead");
   }
 
+  //assert(pthread_mutex_unlock(&mutex) == 0);
   return ret;
 }
 
@@ -90,7 +97,11 @@ extent_client::put(extent_protocol::extentid_t eid, std::string buf)
   c_ext.attr.mtime = std::time(0);
   c_ext.attr.ctime = std::time(0);
 
+  //assert(pthread_mutex_lock(&mutex) == 0);
+
   map_client_cache[eid] = c_ext;
+
+  //assert(pthread_mutex_unlock(&mutex) == 0);
 
   return extent_protocol::OK;
 }
@@ -102,9 +113,43 @@ extent_client::remove(extent_protocol::extentid_t eid)
   c_ext.to_remove = true;
   c_ext.dirty = true;
 
+  //assert(pthread_mutex_lock(&mutex) == 0);
+
   map_client_cache[eid] = c_ext;
+
+  //assert(pthread_mutex_unlock(&mutex) == 0);
   //ret = cl->call(extent_protocol::remove, eid, r);
   return extent_protocol::OK;
 }
 
+void
+extent_client::flush(lock_protocol::lockid_t lid)
+{
+  std::cout << "INSIDE FLUSH" << endl;
+  extent_protocol::status ret;
+  map<extent_protocol::extentid_t, cached_extent>::iterator it;
+  string buf;
+
+  //assert(pthread_mutex_lock(&mutex) == 0);
+
+  it = map_client_cache.find(lid);
+
+  assert(it != map_client_cache.end()); 
+
+  if(it->second.dirty){
+    int r;
+    buf = it->second.data; //can be optimized
+    ret = cl->call(extent_protocol::put, lid, buf, r);
+    assert(ret == extent_protocol::OK);
+  }
+
+  //assert(pthread_mutex_unlock(&mutex) == 0);
+
+}
+
+void
+extent_client::dorelease(lock_protocol::lockid_t lid)
+{
+  flush(lid);
+}
 
