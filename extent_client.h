@@ -9,9 +9,10 @@
 
 // contains the cached extent data + other info
 struct cached_extent {
-  	bool dirty;
+	bool dirty;
   	bool to_remove;
   	std::string data;
+  	extent_protocol::attr attr;
 
   	cached_extent() {
   		to_remove = false;

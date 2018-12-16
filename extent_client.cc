@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
+#include <ctime>
 
 using namespace std;
 
@@ -36,6 +37,7 @@ extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
       ret = extent_protocol::NOENT;
     else {
       buf = it->second.data;
+      it->second.attr.atime = std::time(0);
     }
   }
   else {
@@ -44,6 +46,7 @@ extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
     if(ret == extent_protocol::OK) {
       struct cached_extent c_ext;
       c_ext.data = buf;
+      c_ext.attr.atime = std::time(0);
 
       map_client_cache[eid] = c_ext;
     }
@@ -57,7 +60,22 @@ extent_client::getattr(extent_protocol::extentid_t eid,
 		       extent_protocol::attr &attr)
 {
   extent_protocol::status ret = extent_protocol::OK;
-  ret = cl->call(extent_protocol::getattr, eid, attr);
+
+  map<extent_protocol::extentid_t, cached_extent>::iterator it;
+  it = map_client_cache.find(eid);
+
+  // if the extent is cached, read that copy
+  if(it != map_client_cache.end()) {
+    if(it->second.to_remove)
+      ret = extent_protocol::NOENT;
+    else
+      attr = it->second.attr;
+  }
+  else {
+    ret = cl->call(extent_protocol::getattr, eid, attr);
+    assert("dead");
+  }
+
   return ret;
 }
 
@@ -67,6 +85,10 @@ extent_client::put(extent_protocol::extentid_t eid, std::string buf)
   struct cached_extent c_ext;
   c_ext.data = buf;
   c_ext.dirty = true;
+  c_ext.attr.size = buf.size();
+  c_ext.attr.atime = std::time(0);
+  c_ext.attr.mtime = std::time(0);
+  c_ext.attr.ctime = std::time(0);
 
   map_client_cache[eid] = c_ext;
 
