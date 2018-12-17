@@ -47,6 +47,7 @@ extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
   }
   else {
     ret = cl->call(extent_protocol::get, eid, buf);
+    cout << "\n \n DATA in get : " << buf << "thread: " << pthread_self()<< endl;
 
     if(ret == extent_protocol::OK) {
       struct cached_extent c_ext;
@@ -65,6 +66,7 @@ extent_protocol::status
 extent_client::getattr(extent_protocol::extentid_t eid, 
 		       extent_protocol::attr &attr)
 {
+  std::cout << "\n IN GET ATTTTTTTTTR"<< "thread: " << pthread_self() << endl;
   extent_protocol::status ret = extent_protocol::OK;
 
   map<extent_protocol::extentid_t, cached_extent>::iterator it;
@@ -100,6 +102,7 @@ extent_client::put(extent_protocol::extentid_t eid, std::string buf)
   //assert(pthread_mutex_lock(&mutex) == 0);
 
   map_client_cache[eid] = c_ext;
+  cout << "\n \n DATA in put: " << buf << endl;
 
   //assert(pthread_mutex_unlock(&mutex) == 0);
 
@@ -136,11 +139,21 @@ extent_client::flush(lock_protocol::lockid_t lid)
 
   assert(it != map_client_cache.end()); 
 
-  if(it->second.dirty){
+  if(it->second.to_remove){
+    int r;
+    ret = cl->call(extent_protocol::remove, lid, r);
+    assert(ret == extent_protocol::OK);
+  }
+  else if(it->second.dirty){
+    std:: cout << "\n\nIt is dirty";
     int r;
     buf = it->second.data; //can be optimized
+    std::cout << buf << std::endl ;
     ret = cl->call(extent_protocol::put, lid, buf, r);
     assert(ret == extent_protocol::OK);
+    ret = cl->call(extent_protocol::get, lid, buf);
+    std::cout << "\n\nFLUSH RETURN:" << buf << "thread: " << pthread_self() << "\n";
+
   }
 
   //assert(pthread_mutex_unlock(&mutex) == 0);

@@ -71,6 +71,7 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
 int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr &a)
 {
   int ret_val = extent_protocol::NOENT;
+  std::cout << "\n IN GET ATTR";
 
   std::map<extent_protocol::extentid_t, extent_protocol::attr>::iterator it;
   
