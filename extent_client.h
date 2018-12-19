@@ -11,15 +11,15 @@
 // contains the cached extent data + other info
 struct cached_extent {
 	bool dirty;
-  	bool to_remove;
-  	std::string data;
-  	extent_protocol::attr attr;
+	bool to_remove;
+	std::string data;
+	extent_protocol::attr attr;
 
-  	cached_extent() {
-  		to_remove = false;
-  		dirty = false;
-      data = "";
-  	}
+	cached_extent() {
+		to_remove = false;
+		dirty = false;
+    data = "";
+	}
   };
 
 class extent_client : public lock_release_user {
@@ -38,7 +38,7 @@ class extent_client : public lock_release_user {
   extent_protocol::status put(extent_protocol::extentid_t eid, std::string buf);
   extent_protocol::status remove(extent_protocol::extentid_t eid);
   void flush(lock_protocol::lockid_t);
-  void dorelease(lock_protocol::lockid_t lid);
+  void dorelease(lock_protocol::lockid_t);
 };
 
 #endif 

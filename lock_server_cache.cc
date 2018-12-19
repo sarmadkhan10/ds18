@@ -110,7 +110,7 @@ lock_server_cache::retryer()
 
     map_retry.erase(it);
 
-    //pthread_mutex_unlock(&mutex_);
+    pthread_mutex_unlock(&mutex_);
 
     for(vector<string>::iterator it = retry_cid_list.begin(); it!=retry_cid_list.end(); it++) {
       assert(map_client.find(*it) != map_client.end());
@@ -120,7 +120,7 @@ lock_server_cache::retryer()
       assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
     }
 
-    //pthread_mutex_lock(&mutex_);
+    pthread_mutex_lock(&mutex_);
   }
 }
 
@@ -198,6 +198,7 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
 {
   cout << "lock_server_cache release enter: " << cid << endl;
   pthread_mutex_lock(&mutex_);
+  cout << "release got mutex" << endl;
 
   // check if the releaser actually holds the lock
   bool releaser_holds = false;

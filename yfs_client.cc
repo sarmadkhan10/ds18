@@ -11,7 +11,6 @@
 #include <random>
 #include <string>
 #include <sstream>
-#include "lock_client_cache.h"
 
 using namespace std;
 
@@ -19,10 +18,13 @@ static std::mt19937_64 mt_rand_gen(time(0));
 
 yfs_client::yfs_client(std::string extent_dst, std::string lock_dst)
 {
-  class extent_client *lru;
+  lock_release_user *lru;
   ec = new extent_client(extent_dst);
   assert(pthread_mutex_init(&m_, 0) == 0);
-  lc = new lock_client_cache(lock_dst, ec);
+
+  lru = ec;
+
+  lc = new lock_client_cache(lock_dst, lru);
 
 }
 
@@ -62,9 +64,10 @@ yfs_client::getfile(inum inum, fileinfo &fin)
 {
   int r = OK;
 
-
+  cout << "getfile: " << inum << endl;
   printf("getfile %016llx\n", inum);
   extent_protocol::attr a;
+  assert(lc->acquire(inum) == lock_protocol::OK);
   if (ec->getattr(inum, a) != extent_protocol::OK) {
     r = IOERR;
     goto release;
@@ -78,6 +81,7 @@ yfs_client::getfile(inum inum, fileinfo &fin)
 
  release:
 
+  assert(lc->release(inum) == lock_protocol::OK);
   return r;
 }
 
@@ -89,6 +93,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
 
   printf("getdir %016llx\n", inum);
   extent_protocol::attr a;
+  assert(lc->acquire(inum) == lock_protocol::OK);
   if (ec->getattr(inum, a) != extent_protocol::OK) {
     r = IOERR;
     goto release;
@@ -98,6 +103,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
   din.ctime = a.ctime;
 
  release:
+  assert(lc->release(inum) == lock_protocol::OK);
   return r;
 }
 
@@ -129,9 +135,14 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   // verify parent is a directory
   if(!isdir(parent)) return false;
 
-  if(ec->get(parent, value) != yfs_client::OK) return false;
+  assert(lc->acquire(parent) == lock_protocol::OK);
+  if(ec->get(parent, value) != yfs_client::OK) {
+    assert(lc->release(parent) == lock_protocol::OK);
+    return false;
+  }
+  //assert(lc->release(parent) == lock_protocol::OK);
 
-  if(value.empty()) return false;
+  if(value.empty()) {assert(lc->release(parent) == lock_protocol::OK); return false;}
 
   string to_find(string(name) + '.');
 
@@ -139,12 +150,20 @@ yfs_client::lookup(unsigned long long parent, const char *name, unsigned long lo
   if(loc != string::npos)
     inum = stoull(strtok(&value[value.find(".", loc+1)+1], ";"));
   else
-    return false;
+    {assert(lc->release(parent) == lock_protocol::OK); return false;}
 
   *inum_ = inum;
 
   // get attr
-  if(ec->getattr(inum, a) != yfs_client::OK) return false;
+  assert(lc->acquire(inum) == lock_protocol::OK);
+  if(ec->getattr(inum, a) != yfs_client::OK) {
+    assert(lc->release(inum) == lock_protocol::OK);
+    assert(lc->release(parent) == lock_protocol::OK);
+    return false;
+  }
+
+  assert(lc->release(inum) == lock_protocol::OK);
+  assert(lc->release(parent) == lock_protocol::OK);
 
   *size_ = a.size;
 
@@ -184,7 +203,6 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   }
 
   cout << "createhelper " << parent << " " << name << "not already present." << endl;
-  
 
   assert(lc->acquire(parent) == lock_protocol::OK);
     
@@ -223,10 +241,11 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
       inum_ = mt_rand_gen();
     } while(!isfile(inum_));
   else
-   do {
-     inum_ = mt_rand_gen();
-   } while(isfile(inum_));
+    do {
+      inum_ = mt_rand_gen();
+  } while(isfile(inum_));
 
+  assert(lc->acquire(inum_) == lock_protocol::OK);
   // create a new entry for file
   ec->put(inum_, "");
 
@@ -237,6 +256,7 @@ yfs_client::createhelper(unsigned long long parent, const char *name, unsigned l
   value += out.str();
   ec->put(parent, value);
 
+  assert(lc->release(inum_) == lock_protocol::OK);
   assert(lc->release(parent) == lock_protocol::OK);
 
   cout << "createhelper successful exit." << endl;
@@ -259,18 +279,30 @@ yfs_client::open_file(unsigned long long ino)
 {
   string value;
   ostringstream out;
+  bool ret;
   printf("\n on open file client");
 
+  assert(lc->acquire(ino) == lock_protocol::OK);
 
   // if file is not present, return false
   if(ec->get(ino, value) != yfs_client::OK) {
-    return false;
+    ret = false;
   } else {
-    return true;
+    ret = true;
   }
+
+  assert(lc->release(ino) == lock_protocol::OK);
+
+  return ret;
 }
 int yfs_client::get_(unsigned long long inum_, string &buf){
-  return ec->get(inum_, buf);
+  int ret;
+
+  assert(lc->acquire(inum_) == lock_protocol::OK);
+  ret = ec->get(inum_, buf);
+  assert(lc->release(inum_) == lock_protocol::OK);
+
+  return ret;
 }
 
 // writes to the file inum if it exists
@@ -314,7 +346,9 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
   }
   assert(lc->release(inum) == lock_protocol::OK);
   // read file
+  cout << "here1: " << inum << " " << len << " " << offset << " " << file_content << endl;
   string read_content = file_content.substr(offset, len);
+  cout << "here2" << endl;
 
   // check if EOF reached
   if(read_content.size() < len) {

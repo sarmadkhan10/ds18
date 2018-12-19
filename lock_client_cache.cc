@@ -104,9 +104,8 @@ lock_client_cache::releaser()
 
         //assert(pthread_mutex_unlock(&cache_mutex) == 0);
 
-        std::cout << "\n\n calling dorelease" << std:: endl;
+        cout << "calling dorelease" << endl;
         lu->dorelease((*iter).get_lid());
-        std::cout << "\n\n  CALLED dorelease" << std:: endl;
 
         ret = cl->call(lock_protocol::release, id, (*iter).get_lid(), r);
         assert(ret == lock_protocol::OK);
@@ -164,7 +163,6 @@ lock_client_cache::revoke(lock_protocol::lockid_t lid, int &r)
 lock_protocol::status 
 lock_client_cache::retry(lock_protocol::lockid_t lid, int &r)
 {
-  lock_protocol::status ret ; 
   std::vector<cached_lock>::iterator iter;
 
   assert(pthread_mutex_lock(&cache_mutex) == 0);
