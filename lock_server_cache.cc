@@ -198,7 +198,6 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
 {
   cout << "lock_server_cache release enter: " << cid << endl;
   pthread_mutex_lock(&mutex_);
-  cout << "release got mutex" << endl;
 
   // check if the releaser actually holds the lock
   bool releaser_holds = false;

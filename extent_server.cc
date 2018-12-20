@@ -40,9 +40,6 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
   new_attr.mtime = std::time(0);
   new_attr.ctime = std::time(0);
 
-  //cout << "in put: " << buf << endl;
-  //cout << "size: " << new_attr.size << endl;
-
   file_attr[id] = new_attr;
 
   return extent_protocol::OK;
@@ -84,9 +81,6 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
     a.atime = it->second.atime;
     a.mtime = it->second.mtime;
     a.ctime = it->second.ctime;
-
-    //cout << "in getattr data: " << file_storage[id] << endl;
-    //cout << "in getattr: size: " << a.size << endl;
 
     ret_val = extent_protocol::OK;
   }

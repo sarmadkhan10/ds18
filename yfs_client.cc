@@ -64,7 +64,6 @@ yfs_client::getfile(inum inum, fileinfo &fin)
 {
   int r = OK;
 
-  cout << "getfile: " << inum << endl;
   printf("getfile %016llx\n", inum);
   extent_protocol::attr a;
   assert(lc->acquire(inum) == lock_protocol::OK);
@@ -346,9 +345,7 @@ yfs_client::read_file(unsigned long long inum, size_t len, off_t offset, string 
   }
   assert(lc->release(inum) == lock_protocol::OK);
   // read file
-  cout << "here1: " << inum << " " << len << " " << offset << " " << file_content << endl;
   string read_content = file_content.substr(offset, len);
-  cout << "here2" << endl;
 
   // check if EOF reached
   if(read_content.size() < len) {
