@@ -68,6 +68,7 @@ class lock_release_user {
 // has been received.
 //
 
+class cached_lock;
 
 class lock_client_cache : public lock_client {
  private:
@@ -75,15 +76,48 @@ class lock_client_cache : public lock_client {
   int rlock_port;
   std::string hostname;
   std::string id;
+  public:
+  pthread_mutex_t cache_mutex;
+  pthread_cond_t release_wait;
 
- public:
+  std::vector <cached_lock> cached_locks;
+  std::list <lock_protocol::lockid_t> revoke_list;
+
+  enum lock_state{
+    NONE,
+    FREE ,
+    LOCKED,
+    ACQUIRING,
+    RELEASING
+  };
   static int last_port;
   lock_client_cache(std::string xdst, class lock_release_user *l = 0);
   virtual ~lock_client_cache() {};
   lock_protocol::status acquire(lock_protocol::lockid_t);
+  lock_protocol::status revoke(lock_protocol::lockid_t, int &);
+  lock_protocol::status retry(lock_protocol::lockid_t, int &);
   virtual lock_protocol::status release(lock_protocol::lockid_t);
   void releaser();
+
+  std::vector<cached_lock>::iterator find_lock(lock_protocol::lockid_t lid);
 };
+
+class cached_lock {
+  private:
+    lock_protocol::lockid_t lid;
+  
+  public:
+    pthread_mutex_t lock_mutex;
+    pthread_cond_t revoke_wait;
+   
+    lock_client_cache::lock_state state;
+
+    cached_lock(lock_protocol::lockid_t);
+
+    lock_protocol::lockid_t get_lid() {return lid;}
+    lock_client_cache::lock_state get_state() {return state;}
+}
+;
 #endif
 
 
