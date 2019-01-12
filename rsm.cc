@@ -229,6 +229,9 @@ rsm::commit_change()
   pthread_mutex_lock(&rsm_mutex);
   // Lab 7:
   // - If I am not part of the new view, start recovery
+  if(!cfg->ismember(cfg->myaddr())) {
+    pthread_cond_signal(&recovery_cond);
+  }
   pthread_mutex_unlock(&rsm_mutex);
 }
 
@@ -305,6 +308,10 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
     ret = rsm_client_protocol::BUSY;
   } else {
     // Lab 7: invoke config to create a new view that contains m
+    if(cfg->add(m)) {
+      //log
+      r.log = cfg->dump();
+    }
   }
   assert (pthread_mutex_unlock(&rsm_mutex) == 0);
   return ret;
@@ -345,9 +352,19 @@ rsm::set_primary()
   }
 
   assert(p.size() > 0);
+  std::vector<unsigned long long> memsi;
   for (unsigned i = 0; i < p.size(); i++) {
-    if (isamember(p[i], c)) {
-      primary = p[i];
+    std::istringstream ist(p[i]);
+    unsigned long long mem;
+    ist >> mem;
+    memsi.push_back(mem);
+  }
+  std::sort(memsi.begin(), memsi.end());
+  for (unsigned i = 0; i < memsi.size(); i++) {
+    std::stringstream sst;
+    sst << memsi[i];
+    if (isamember(sst.str(), c)) {
+      primary = sst.str();
       printf("set_primary: primary is %s\n", primary.c_str());
       return;
     }

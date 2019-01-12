@@ -215,7 +215,6 @@ proposer::decide(unsigned instance, std::vector<std::string> accepts,
   stable = true;
 
   acc->commit(instance, v);
-  //decidereq(std::string src, paxos_protocol::decidearg a, int &r)
 
   std::vector<std::string>::iterator it;
 
@@ -278,6 +277,7 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
     n_h = a.n;
 
     //log
+    l->loghigh(n_h);
 
     r.n_a = n_a;
     r.v_a = v_a;
@@ -302,6 +302,8 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
     v_a = a.v;
 
     //log
+    // log instance?
+    l->logprop(a.n, a.v);
 
     r = true;
   }
@@ -321,6 +323,7 @@ acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
     commit(a.instance, a.v);
 
     //log
+    l->loginstance(a.instance, a.v);
   }
 
   return paxos_protocol::OK;
