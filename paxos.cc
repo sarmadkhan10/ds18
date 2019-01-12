@@ -86,7 +86,7 @@ proposer::setn()
 }
 
 bool
-proposer::run(int instance, std::vector<std::string> newnodes, std::string newv)
+proposer::run(int instance, std::vector<std::string> c_nodes, std::string c_v)
 {
   std::vector<std::string> accepts;
   std::vector<std::string> nodes;
@@ -96,7 +96,7 @@ proposer::run(int instance, std::vector<std::string> newnodes, std::string newv)
 
   pthread_mutex_lock(&pxs_mutex);
   printf("start: initiate paxos for %s w. i=%d v=%s stable=%d\n",
-	 print_members(newnodes).c_str(), instance, newv.c_str(), stable);
+	 print_members(c_nodes).c_str(), instance, c_v.c_str(), stable);
   if (!stable) {  // already running proposer?
     printf("proposer::run: already running\n");
     pthread_mutex_unlock(&pxs_mutex);
@@ -148,7 +148,35 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
          std::vector<std::string> nodes,
          std::string &v)
 {
-  return false;
+  std::vector<std::string>::iterator it;
+
+  for(it = nodes.begin(); it != nodes.end(); it++) {
+    // preparereq rpc to every node
+    paxos_protocol::preparearg prep_a;
+    paxos_protocol::prepareres prep_r;
+
+    prep_a.n = my_n;
+    prep_a.instance = instance;
+
+    handle h(*it);
+    h.get_rpcc()->call(paxos_protocol::preparereq, me, prep_a, prep_r, rpcc::to(120000));
+
+    if(prep_r.accept) {
+      accepts.push_back(*it);
+
+      //prep_r.n_a;
+      //prep_r.v_a;
+      //v;
+    } else {
+      // old instarnce. call commit. done
+      stable = true;
+
+      acc->commit(prep_r.oldinstance, prep_r.v_a);
+    }
+    // reject?
+  }
+
+  return true;
 }
 
 
@@ -156,12 +184,54 @@ void
 proposer::accept(unsigned instance, std::vector<std::string> &accepts,
         std::vector<std::string> nodes, std::string v)
 {
+  //acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
+
+  std::vector<std::string>::iterator it;
+
+  for(it = nodes.begin(); it != nodes.end(); it++) {
+    // preparereq rpc to every node
+    paxos_protocol::acceptarg acc_a;
+    int r;
+
+    acc_a.v = v;
+    acc_a.n = my_n;
+    acc_a.instance = instance;
+
+    handle h(*it);
+    // check ret val?
+    h.get_rpcc()->call(paxos_protocol::acceptreq, me, acc_a, r, rpcc::to(120000));
+
+    // if accepted
+    if(r) {
+      accepts.push_back(*it);
+    }
+  }
 }
 
 void
 proposer::decide(unsigned instance, std::vector<std::string> accepts, 
 	      std::string v)
 {
+  stable = true;
+
+  acc->commit(instance, v);
+  //decidereq(std::string src, paxos_protocol::decidearg a, int &r)
+
+  std::vector<std::string>::iterator it;
+
+  for(it = accepts.begin(); it != accepts.end(); it++) {
+    // preparereq rpc to every node
+    paxos_protocol::decidearg dec_a;
+    int r;
+
+    dec_a.instance = instance;
+    dec_a.v = v;
+
+    handle h(*it);
+    // check ret val?
+    h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(120000));
+  }
+
 }
 
 acceptor::acceptor(class paxos_change *_cfg, bool _first, std::string _me, 
@@ -195,6 +265,24 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
     paxos_protocol::prepareres &r)
 {
   // handle a preparereq message from proposer
+
+  memset(&r, 0, sizeof(struct paxos_protocol::prepareres));
+
+  // if the proposer is lagging behind
+  if(a.instance <= instance_h) {
+    r.accept = false;
+    r.oldinstance = a.instance;
+    r.v_a = value(a.instance);
+  } else if(a.n > n_h) {
+    r.accept = true;
+    n_h = a.n;
+
+    //log
+
+    r.n_a = n_a;
+    r.v_a = v_a;
+  }
+
   return paxos_protocol::OK;
 
 }
@@ -205,6 +293,19 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
 
   // handle an acceptreq message from proposer
 
+  // if the proposer is lagging behind
+  if(a.instance <= instance_h) {
+    //
+    r = false;
+  } else if(a.n > n_h) {
+    n_a = a.n;
+    v_a = a.v;
+
+    //log
+
+    r = true;
+  }
+
   return paxos_protocol::OK;
 }
 
@@ -213,6 +314,14 @@ acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
 {
 
   // handle an decide message from proposer
+
+  if(a.instance <= instance_h) {
+    // actual ignore
+  } else {
+    commit(a.instance, a.v);
+
+    //log
+  }
 
   return paxos_protocol::OK;
 }
