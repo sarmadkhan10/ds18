@@ -12,6 +12,8 @@
 // paxos_commit to inform higher layers of the agreed value for this
 // instance.
 
+using namespace std;
+
 
 bool
 operator> (const prop_t &a, const prop_t &b)
@@ -83,11 +85,15 @@ void
 proposer::setn()
 {
   my_n.n = acc->get_n_h().n + 1 > my_n.n + 1 ? acc->get_n_h().n + 1 : my_n.n + 1;
+
+  //
+  my_n.m = me;
 }
 
 bool
 proposer::run(int instance, std::vector<std::string> c_nodes, std::string c_v)
 {
+  cout << "proposer run: " << c_v << endl;
   std::vector<std::string> accepts;
   std::vector<std::string> nodes;
   std::vector<std::string> nodes1;
@@ -108,12 +114,13 @@ proposer::run(int instance, std::vector<std::string> c_nodes, std::string c_v)
   v.clear();
   nodes = c_nodes;
   if (prepare(instance, accepts, nodes, v)) {
+    cout << "prepare success" << endl;
 
     if (majority(c_nodes, accepts)) {
       printf("paxos::manager: received a majority of prepare responses\n");
 
       if (v.size() == 0) {
-	v = c_v;
+	      v = c_v;
       }
 
       breakpoint1();
@@ -149,6 +156,8 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
          std::string &v)
 {
   std::vector<std::string>::iterator it;
+  prop_t highest;
+  highest.n = 0;
 
   for(it = nodes.begin(); it != nodes.end(); it++) {
     // preparereq rpc to every node
@@ -159,21 +168,29 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
     prep_a.instance = instance;
 
     handle h(*it);
-    h.get_rpcc()->call(paxos_protocol::preparereq, me, prep_a, prep_r, rpcc::to(120000));
+    int ret = h.get_rpcc()->call(paxos_protocol::preparereq, me, prep_a, prep_r, rpcc::to(1000));
 
-    if(prep_r.accept) {
-      accepts.push_back(*it);
+    if(ret == paxos_protocol::OK) {
+      if(prep_r.accept) {
+        accepts.push_back(*it);
 
-      //prep_r.n_a;
-      //prep_r.v_a;
-      //v;
-    } else {
-      // old instarnce. call commit. done
-      stable = true;
+        if(!prep_r.v_a.empty()) {
+          cout << "prepres not empty" << endl;
+          if(prep_r.n_a > highest) {
+            highest = prep_r.n_a;
+            v = prep_r.v_a;
+            cout << "hightest na: " << prep_r.n_a.n << " va" << v << endl; 
+          }
+        }
+      } else {
+        // old instarnce. call commit. done
+        stable = true;
 
-      acc->commit(prep_r.oldinstance, prep_r.v_a);
+        cout << "acc commit" << endl;
+        acc->commit(prep_r.oldinstance, prep_r.v_a);
+      }
+      // reject?
     }
-    // reject?
   }
 
   return true;
@@ -184,8 +201,7 @@ void
 proposer::accept(unsigned instance, std::vector<std::string> &accepts,
         std::vector<std::string> nodes, std::string v)
 {
-  //acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
-
+  cout << "accept start" << endl;
   std::vector<std::string>::iterator it;
 
   for(it = nodes.begin(); it != nodes.end(); it++) {
@@ -199,13 +215,15 @@ proposer::accept(unsigned instance, std::vector<std::string> &accepts,
 
     handle h(*it);
     // check ret val?
-    h.get_rpcc()->call(paxos_protocol::acceptreq, me, acc_a, r, rpcc::to(120000));
+    h.get_rpcc()->call(paxos_protocol::acceptreq, me, acc_a, r, rpcc::to(1000));
 
     // if accepted
     if(r) {
       accepts.push_back(*it);
     }
   }
+
+  cout << "accept_exit" << endl;
 }
 
 void
@@ -228,7 +246,7 @@ proposer::decide(unsigned instance, std::vector<std::string> accepts,
 
     handle h(*it);
     // check ret val?
-    h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(120000));
+    h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(1000));
   }
 
 }
@@ -265,8 +283,6 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
 {
   // handle a preparereq message from proposer
 
-  memset(&r, 0, sizeof(struct paxos_protocol::prepareres));
-
   // if the proposer is lagging behind
   if(a.instance <= instance_h) {
     r.accept = false;
@@ -281,6 +297,8 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
 
     r.n_a = n_a;
     r.v_a = v_a;
+
+    cout << "prepreq: v_a: " << v_a << endl;
   }
 
   return paxos_protocol::OK;
@@ -293,20 +311,24 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
 
   // handle an acceptreq message from proposer
 
+  r = false;
+
   // if the proposer is lagging behind
   if(a.instance <= instance_h) {
     //
     r = false;
-  } else if(a.n > n_h) {
+    cout << "acceptreq: oldins" << endl;
+  } else if(a.n >= n_h) {
     n_a = a.n;
     v_a = a.v;
+    cout << "updated va in acceptreq: " << v_a << endl;
 
-    //log
     // log instance?
     l->logprop(a.n, a.v);
 
     r = true;
   }
+  cout << "acceptreq: exit" << endl;
 
   return paxos_protocol::OK;
 }
@@ -321,9 +343,6 @@ acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
     // actual ignore
   } else {
     commit(a.instance, a.v);
-
-    //log
-    l->loginstance(a.instance, a.v);
   }
 
   return paxos_protocol::OK;
