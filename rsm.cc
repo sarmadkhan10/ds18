@@ -238,6 +238,9 @@ rsm::commit_change()
   if(!cfg->ismember(cfg->myaddr())) {
     pthread_cond_signal(&recovery_cond);
   }
+  else {
+    set_primary();
+  }
   //pthread_mutex_unlock(&rsm_mutex);
 }
 

@@ -120,8 +120,10 @@ proposer::run(int instance, std::vector<std::string> c_nodes, std::string c_v)
       printf("paxos::manager: received a majority of prepare responses\n");
 
       if (v.size() == 0) {
-	      v = c_v;
+        v = c_v;
       }
+      else
+        cout << "cannot propose a new value. using returned one: " << v << endl;
 
       breakpoint1();
 
@@ -130,14 +132,14 @@ proposer::run(int instance, std::vector<std::string> c_nodes, std::string c_v)
       accept(instance, accepts, nodes1, v);
 
       if (majority(c_nodes, accepts)) {
-	printf("paxos::manager: received a majority of accept responses\n");
+        printf("paxos::manager: received a majority of accept responses\n");
 
-	breakpoint2();
+        breakpoint2();
 
-	decide(instance, accepts, v);
-	r = true;
+        decide(instance, accepts, v);
+        r = true;
       } else {
-	printf("paxos::manager: no majority of accept responses\n");
+        printf("paxos::manager: no majority of accept responses\n");
       }
     } else {
       printf("paxos::manager: no majority of prepare responses\n");
@@ -168,28 +170,34 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
     prep_a.instance = instance;
 
     handle h(*it);
-    int ret = h.get_rpcc()->call(paxos_protocol::preparereq, me, prep_a, prep_r, rpcc::to(1000));
 
-    if(ret == paxos_protocol::OK) {
-      if(prep_r.accept) {
-        accepts.push_back(*it);
+    if(h.get_rpcc() != NULL) {
+      int ret = h.get_rpcc()->call(paxos_protocol::preparereq, me, prep_a, prep_r, rpcc::to(1000));
 
-        if(!prep_r.v_a.empty()) {
-          cout << "prepres not empty" << endl;
-          if(prep_r.n_a > highest) {
-            highest = prep_r.n_a;
-            v = prep_r.v_a;
-            cout << "hightest na: " << prep_r.n_a.n << " va" << v << endl; 
+      cout << "preparerep rpc done: " << *it << " ret: " << ret << endl;
+
+      if(ret == paxos_protocol::OK) {
+        if(prep_r.accept) {
+          accepts.push_back(*it);
+
+          if(!prep_r.v_a.empty()) {
+            cout << "prepres not empty" << endl;
+
+            if(prep_r.n_a > highest || highest.n == 0) {
+              highest = prep_r.n_a;
+              v = prep_r.v_a;
+              cout << "highest na: " << prep_r.n_a.n << " va" << v << endl; 
+            }
           }
-        }
-      } else {
-        // old instarnce. call commit. done
-        stable = true;
+        } else {
+          // old instarnce. call commit. done
+          stable = true;
 
-        cout << "acc commit" << endl;
-        acc->commit(prep_r.oldinstance, prep_r.v_a);
+          cout << "acc commit" << endl;
+          acc->commit(prep_r.oldinstance, prep_r.v_a);
+        }
+        // reject?
       }
-      // reject?
     }
   }
 
@@ -214,12 +222,15 @@ proposer::accept(unsigned instance, std::vector<std::string> &accepts,
     acc_a.instance = instance;
 
     handle h(*it);
-    // check ret val?
-    h.get_rpcc()->call(paxos_protocol::acceptreq, me, acc_a, r, rpcc::to(1000));
 
-    // if accepted
-    if(r) {
-      accepts.push_back(*it);
+    if(h.get_rpcc() != NULL) {
+      // check ret val?
+      h.get_rpcc()->call(paxos_protocol::acceptreq, me, acc_a, r, rpcc::to(1000));
+
+      // if accepted
+      if(r) {
+        accepts.push_back(*it);
+      }
     }
   }
 
@@ -245,8 +256,11 @@ proposer::decide(unsigned instance, std::vector<std::string> accepts,
     dec_a.v = v;
 
     handle h(*it);
-    // check ret val?
-    h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(1000));
+
+    if(h.get_rpcc() != NULL) {
+      // check ret val?
+      h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(1000));
+    }
   }
 
 }
@@ -288,6 +302,7 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
     r.accept = false;
     r.oldinstance = a.instance;
     r.v_a = value(a.instance);
+    cout << "preparereq: old ins: " << r.v_a;
   } else if(a.n > n_h) {
     r.accept = true;
     n_h = a.n;
