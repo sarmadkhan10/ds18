@@ -12,6 +12,8 @@
 // paxos_commit to inform higher layers of the agreed value for this
 // instance.
 
+using namespace std;
+
 
 bool
 operator> (const prop_t &a, const prop_t &b)
@@ -83,11 +85,15 @@ void
 proposer::setn()
 {
   my_n.n = acc->get_n_h().n + 1 > my_n.n + 1 ? acc->get_n_h().n + 1 : my_n.n + 1;
+
+  //
+  my_n.m = me;
 }
 
 bool
-proposer::run(int instance, std::vector<std::string> newnodes, std::string newv)
+proposer::run(int instance, std::vector<std::string> c_nodes, std::string c_v)
 {
+  cout << "proposer run: " << c_v << endl;
   std::vector<std::string> accepts;
   std::vector<std::string> nodes;
   std::vector<std::string> nodes1;
@@ -96,7 +102,7 @@ proposer::run(int instance, std::vector<std::string> newnodes, std::string newv)
 
   pthread_mutex_lock(&pxs_mutex);
   printf("start: initiate paxos for %s w. i=%d v=%s stable=%d\n",
-	 print_members(newnodes).c_str(), instance, newv.c_str(), stable);
+	 print_members(c_nodes).c_str(), instance, c_v.c_str(), stable);
   if (!stable) {  // already running proposer?
     printf("proposer::run: already running\n");
     pthread_mutex_unlock(&pxs_mutex);
@@ -108,13 +114,16 @@ proposer::run(int instance, std::vector<std::string> newnodes, std::string newv)
   v.clear();
   nodes = c_nodes;
   if (prepare(instance, accepts, nodes, v)) {
+    cout << "prepare success" << endl;
 
     if (majority(c_nodes, accepts)) {
       printf("paxos::manager: received a majority of prepare responses\n");
 
       if (v.size() == 0) {
-	v = c_v;
+        v = c_v;
       }
+      else
+        cout << "cannot propose a new value. using returned one: " << v << endl;
 
       breakpoint1();
 
@@ -123,14 +132,14 @@ proposer::run(int instance, std::vector<std::string> newnodes, std::string newv)
       accept(instance, accepts, nodes1, v);
 
       if (majority(c_nodes, accepts)) {
-	printf("paxos::manager: received a majority of accept responses\n");
+        printf("paxos::manager: received a majority of accept responses\n");
 
-	breakpoint2();
+        breakpoint2();
 
-	decide(instance, accepts, v);
-	r = true;
+        decide(instance, accepts, v);
+        r = true;
       } else {
-	printf("paxos::manager: no majority of accept responses\n");
+        printf("paxos::manager: no majority of accept responses\n");
       }
     } else {
       printf("paxos::manager: no majority of prepare responses\n");
@@ -148,7 +157,51 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
          std::vector<std::string> nodes,
          std::string &v)
 {
-  return false;
+  std::vector<std::string>::iterator it;
+  prop_t highest;
+  highest.n = 0;
+
+  for(it = nodes.begin(); it != nodes.end(); it++) {
+    // preparereq rpc to every node
+    paxos_protocol::preparearg prep_a;
+    paxos_protocol::prepareres prep_r;
+
+    prep_a.n = my_n;
+    prep_a.instance = instance;
+
+    handle h(*it);
+
+    if(h.get_rpcc() != NULL) {
+      int ret = h.get_rpcc()->call(paxos_protocol::preparereq, me, prep_a, prep_r, rpcc::to(1000));
+
+      cout << "preparerep rpc done: " << *it << " ret: " << ret << endl;
+
+      if(ret == paxos_protocol::OK) {
+        if(prep_r.accept) {
+          accepts.push_back(*it);
+
+          if(!prep_r.v_a.empty()) {
+            cout << "prepres not empty" << endl;
+
+            if(prep_r.n_a > highest || highest.n == 0) {
+              highest = prep_r.n_a;
+              v = prep_r.v_a;
+              cout << "highest na: " << prep_r.n_a.n << " va" << v << endl; 
+            }
+          }
+        } else {
+          // old instarnce. call commit. done
+          stable = true;
+
+          cout << "acc commit" << endl;
+          acc->commit(prep_r.oldinstance, prep_r.v_a);
+        }
+        // reject?
+      }
+    }
+  }
+
+  return true;
 }
 
 
@@ -156,12 +209,60 @@ void
 proposer::accept(unsigned instance, std::vector<std::string> &accepts,
         std::vector<std::string> nodes, std::string v)
 {
+  cout << "accept start" << endl;
+  std::vector<std::string>::iterator it;
+
+  for(it = nodes.begin(); it != nodes.end(); it++) {
+    // preparereq rpc to every node
+    paxos_protocol::acceptarg acc_a;
+    int r;
+
+    acc_a.v = v;
+    acc_a.n = my_n;
+    acc_a.instance = instance;
+
+    handle h(*it);
+
+    if(h.get_rpcc() != NULL) {
+      // check ret val?
+      h.get_rpcc()->call(paxos_protocol::acceptreq, me, acc_a, r, rpcc::to(1000));
+
+      // if accepted
+      if(r) {
+        accepts.push_back(*it);
+      }
+    }
+  }
+
+  cout << "accept_exit" << endl;
 }
 
 void
 proposer::decide(unsigned instance, std::vector<std::string> accepts, 
 	      std::string v)
 {
+  stable = true;
+
+  acc->commit(instance, v);
+
+  std::vector<std::string>::iterator it;
+
+  for(it = accepts.begin(); it != accepts.end(); it++) {
+    // preparereq rpc to every node
+    paxos_protocol::decidearg dec_a;
+    int r;
+
+    dec_a.instance = instance;
+    dec_a.v = v;
+
+    handle h(*it);
+
+    if(h.get_rpcc() != NULL) {
+      // check ret val?
+      h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(1000));
+    }
+  }
+
 }
 
 acceptor::acceptor(class paxos_change *_cfg, bool _first, std::string _me, 
@@ -195,6 +296,26 @@ acceptor::preparereq(std::string src, paxos_protocol::preparearg a,
     paxos_protocol::prepareres &r)
 {
   // handle a preparereq message from proposer
+
+  // if the proposer is lagging behind
+  if(a.instance <= instance_h) {
+    r.accept = false;
+    r.oldinstance = a.instance;
+    r.v_a = value(a.instance);
+    cout << "preparereq: old ins: " << r.v_a;
+  } else if(a.n > n_h) {
+    r.accept = true;
+    n_h = a.n;
+
+    //log
+    l->loghigh(n_h);
+
+    r.n_a = n_a;
+    r.v_a = v_a;
+
+    cout << "prepreq: v_a: " << v_a << endl;
+  }
+
   return paxos_protocol::OK;
 
 }
@@ -205,6 +326,25 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
 
   // handle an acceptreq message from proposer
 
+  r = false;
+
+  // if the proposer is lagging behind
+  if(a.instance <= instance_h) {
+    //
+    r = false;
+    cout << "acceptreq: oldins" << endl;
+  } else if(a.n >= n_h) {
+    n_a = a.n;
+    v_a = a.v;
+    cout << "updated va in acceptreq: " << v_a << endl;
+
+    // log instance?
+    l->logprop(a.n, a.v);
+
+    r = true;
+  }
+  cout << "acceptreq: exit" << endl;
+
   return paxos_protocol::OK;
 }
 
@@ -213,6 +353,12 @@ acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
 {
 
   // handle an decide message from proposer
+
+  if(a.instance <= instance_h) {
+    // actual ignore
+  } else {
+    commit(a.instance, a.v);
+  }
 
   return paxos_protocol::OK;
 }

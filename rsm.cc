@@ -85,6 +85,8 @@
 #include "rsm.h"
 #include "rsm_client.h"
 
+using namespace std;
+
 static void *
 recoverythread(void *x)
 {
@@ -151,6 +153,7 @@ rsm::recovery()
 
   while (1) {
     while (!cfg->ismember(cfg->myaddr())) {
+      cout << "recovery: calling join" << endl;
       if (join(primary)) {
 	printf("recovery: joined\n");
       } else {
@@ -163,6 +166,7 @@ rsm::recovery()
     if (r) inviewchange = false;
     printf("recovery: go to sleep %d %d\n", insync, inviewchange);
     pthread_cond_wait(&recovery_cond, &rsm_mutex);
+    cout << "Recovery started by: " << cfg->myaddr() << endl;
   }
   assert(pthread_mutex_unlock(&rsm_mutex)==0);
 }
@@ -235,6 +239,7 @@ rsm::join(std::string m) {
     ret = h.get_rpcc()->call(rsm_protocol::joinreq, cfg->myaddr(), last_myvs, 
 			     r, rpcc::to(120000));
     assert(pthread_mutex_lock(&rsm_mutex)==0);
+    cout << "returned from join req: " << ret << endl;
   }
   if (h.get_rpcc() == 0 || ret != rsm_protocol::OK) {
     printf("rsm::join: couldn't reach %s %p %d\n", m.c_str(), 
@@ -255,10 +260,17 @@ rsm::join(std::string m) {
 void 
 rsm::commit_change() 
 {
-  pthread_mutex_lock(&rsm_mutex);
+  //pthread_mutex_lock(&rsm_mutex);
   // Lab 7:
   // - If I am not part of the new view, start recovery
-  pthread_mutex_unlock(&rsm_mutex);
+  cout << "rsm commit change" << endl;
+  if(!cfg->ismember(cfg->myaddr())) {
+    pthread_cond_signal(&recovery_cond);
+  }
+  else {
+    set_primary();
+  }
+  //pthread_mutex_unlock(&rsm_mutex);
 }
 
 
@@ -352,7 +364,16 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
     printf("joinreq: busy\n");
     ret = rsm_client_protocol::BUSY;
   } else {
+    cout << "joinreq: invoking add" << endl;
     // Lab 7: invoke config to create a new view that contains m
+    //assert (pthread_mutex_unlock(&rsm_mutex) == 0);
+    if(cfg->add(m)) {
+      cout << "joinreq: add success" << endl;
+      //log
+      r.log = cfg->dump();
+    }
+    //assert (pthread_mutex_lock(&rsm_mutex) == 0);
+    cout << "joinreq: add success1" << endl;
   }
   assert (pthread_mutex_unlock(&rsm_mutex) == 0);
   return ret;
@@ -393,9 +414,19 @@ rsm::set_primary()
   }
 
   assert(p.size() > 0);
+  std::vector<unsigned long long> memsi;
   for (unsigned i = 0; i < p.size(); i++) {
-    if (isamember(p[i], c)) {
-      primary = p[i];
+    std::istringstream ist(p[i]);
+    unsigned long long mem;
+    ist >> mem;
+    memsi.push_back(mem);
+  }
+  std::sort(memsi.begin(), memsi.end());
+  for (unsigned i = 0; i < memsi.size(); i++) {
+    std::stringstream sst;
+    sst << memsi[i];
+    if (isamember(sst.str(), c)) {
+      primary = sst.str();
       printf("set_primary: primary is %s\n", primary.c_str());
       return;
     }
