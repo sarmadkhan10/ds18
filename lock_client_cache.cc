@@ -35,6 +35,9 @@ lock_client_cache::lock_client_cache(std::string xdst,
   assert(pthread_cond_init(&release_wait, NULL) == 0);
   assert(pthread_mutex_init(&cache_mutex, NULL) == 0);
 
+  if(lu == NULL)
+    cout << "it's null" << endl;
+
   srand(time(NULL)^last_port);
   rlock_port = ((rand()%32000) | (0x1 << 10));
   const char *hname;
@@ -45,6 +48,8 @@ lock_client_cache::lock_client_cache(std::string xdst,
   id = host.str();
   last_port = rlock_port;
   rpcs *rlsrpc = new rpcs(rlock_port);
+
+  rsm_c = new rsm_client(xdst);
   cout << "new client created: " << id << endl;
   /* register RPC handlers with rlsrpc */
   rlsrpc->reg(rlock_protocol::revoke, this, &lock_client_cache::revoke);
@@ -104,10 +109,12 @@ lock_client_cache::releaser()
 
         //assert(pthread_mutex_unlock(&cache_mutex) == 0);
 
-        cout << "calling dorelease" << endl;
-        lu->dorelease((*iter).get_lid());
+        if(lu != NULL) {
+          cout << "calling dorelease" << endl;
+          lu->dorelease((*iter).get_lid());
+        }
 
-        ret = cl->call(lock_protocol::release, id, (*iter).get_lid(), r);
+        ret = rsm_c->call(lock_protocol::release, id, (*iter).get_lid(), r);
         assert(ret == lock_protocol::OK);
 
         //assert(pthread_mutex_lock(&cache_mutex) == 0);
@@ -224,13 +231,13 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       // while holding lock_mutex. deadlock?
       assert(pthread_mutex_unlock(&cache_mutex) == 0);
 
-      ret = cl->call(lock_protocol::acquire, id, lid, r);
+      ret = rsm_c->call(lock_protocol::acquire, id, lid, r);
 
       while(ret == lock_protocol::RETRY) {
         //assuming the lock's mutex is released within the cond_wait
         pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
 
-        ret = cl->call(lock_protocol::acquire, id, lid, r);
+        ret = rsm_c->call(lock_protocol::acquire, id, lid, r);
 
         if(ret == lock_protocol::OK) {
           break;

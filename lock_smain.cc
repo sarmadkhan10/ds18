@@ -47,8 +47,13 @@ main(int argc, char *argv[])
   //server.reg(lock_protocol::stat, &lsc, &lock_server_cache::stat);
   server.reg(lock_protocol::acquire, &lsc, &lock_server_cache::acquire);
   server.reg(lock_protocol::release, &lsc, &lock_server_cache::release);
+#else
+  // lab8
+  lock_server_cache lsc(&rsm);
+  //rpcs server(atoi(argv[1]), count);
+  rsm.reg(lock_protocol::acquire, &lsc, &lock_server_cache::acquire);
+  rsm.reg(lock_protocol::release, &lsc, &lock_server_cache::release);
 #endif
-
 
   while(1)
     sleep(1000);

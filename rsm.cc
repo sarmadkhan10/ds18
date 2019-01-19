@@ -269,7 +269,9 @@ rsm::commit_change()
   }
   else {
     set_primary();
+    inviewchange = false;
   }
+  myvs.vid = cfg->vid();
   //pthread_mutex_unlock(&rsm_mutex);
 }
 
@@ -299,8 +301,51 @@ rsm::execute(int procno, std::string req)
 rsm_client_protocol::status
 rsm::client_invoke(int procno, std::string req, std::string &r)
 {
+  pthread_mutex_lock(&invoke_mutex);
+
   int ret = rsm_protocol::OK;
   // For lab 8
+  int dummy;
+
+  // if the node is not the primary, inform the client
+  if(!amiprimary()) {
+    pthread_mutex_unlock(&invoke_mutex);
+    return rsm_client_protocol::NOTPRIMARY;
+  }
+
+  myvs.seqno++;
+
+  // call invoke on all replicas
+  std::vector<std::string> cur_mems = cfg->get_curview();
+
+  std::vector<std::string>::iterator it;
+  for(it = cur_mems.begin(); it != cur_mems.end(); it++) {
+
+    if(*it == cfg->myaddr())
+      continue;
+
+    handle h(*it);
+
+    if(h.get_rpcc() != NULL) {
+      int ret_val = h.get_rpcc()->call(rsm_protocol::invoke, procno, myvs, req, dummy, rpcc::to(1000));
+
+      // assuming only timeout failure?
+      if(ret_val != rsm_protocol::OK) {
+        pthread_mutex_unlock(&invoke_mutex);
+        return rsm_client_protocol::BUSY;
+      }
+    }
+  }
+
+  // all replicas replied OK, exec locally
+  unmarshall rep(execute(procno, req));
+
+  rep >> ret;
+
+  // update vs
+  last_myvs = myvs;
+
+  pthread_mutex_unlock(&invoke_mutex);
   return ret;
 }
 
@@ -316,6 +361,21 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
 {
   rsm_protocol::status ret = rsm_protocol::OK;
   // For lab 8
+
+  if(insync) {
+    return rsm_protocol::BUSY;
+  }
+
+  // check for gaps in seqno
+  if(last_myvs.seqno+1 == vs.seqno) {
+    assert(myvs.vid == vs.vid);
+
+    cout << "here1" << endl;
+
+    // ignoring rep for now?
+    execute(proc, req);
+  }
+
   return ret;
 }
 

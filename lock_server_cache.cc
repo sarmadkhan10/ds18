@@ -69,13 +69,16 @@ lock_server_cache::revoker()
 
         assert(map_client.find(rev_cid) != map_client.end());
 
-        rpcc *cl = map_client[rev_cid];
+        // lab8
+        if(rsm->amiprimary()) {
+          rpcc *cl = map_client[rev_cid];
 
-        int r;
-        int ret = cl->call(rlock_protocol::revoke, rev_lid, r);
-        assert (ret == lock_protocol::OK);
+          int r;
+          int ret = cl->call(rlock_protocol::revoke, rev_lid, r);
+          assert (ret == lock_protocol::OK);
 
-        cout << "revoke rpc done: " << rev_lid << " cid: " << rev_cid << endl;
+          cout << "revoke rpc done: " << rev_lid << " cid: " << rev_cid << endl;
+        }
 
         //pthread_mutex_lock(&mutex_);
       }
@@ -111,17 +114,20 @@ lock_server_cache::retryer()
 
     map_retry.erase(it);
 
-    pthread_mutex_unlock(&mutex_);
+    // lab8
+    if(rsm->amiprimary()) {
+      pthread_mutex_unlock(&mutex_);
 
-    for(vector<string>::iterator it = retry_cid_list.begin(); it!=retry_cid_list.end(); it++) {
-      assert(map_client.find(*it) != map_client.end());
-      rpcc *cl = map_client[*it];
+      for(vector<string>::iterator it = retry_cid_list.begin(); it!=retry_cid_list.end(); it++) {
+        assert(map_client.find(*it) != map_client.end());
+        rpcc *cl = map_client[*it];
 
-      int r;
-      assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
-    }
+        int r;
+        assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
+      }
 
-    pthread_mutex_lock(&mutex_);
+      pthread_mutex_lock(&mutex_);
+   }
   }
 }
 
@@ -186,7 +192,8 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
       if(it_rev == map_revoke.end()) {
         map_revoke[lid] = make_pair(it->second, false);
 
-      pthread_cond_signal(&cond_revoke);}
+        pthread_cond_signal(&cond_revoke);
+      }
 
       assert(pthread_mutex_unlock(&mutex_) == 0);
 
