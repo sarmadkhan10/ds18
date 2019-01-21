@@ -53,7 +53,7 @@ lock_server_cache::revoker()
   // messages to lock holders whenever another client wants the
   // same lock
   
-  std::map<lock_protocol::lockid_t, std::pair<std::string, bool>>::iterator iter;
+  std::map<lock_protocol::lockid_t, std::pair<std::string, int>>::iterator iter;
 
   pthread_mutex_lock(&mutex_);
 
@@ -160,6 +160,8 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
     // ownership of lock
     map_lock[lid] = cid;
 
+    cout << "new lock created. lid: " << lid << endl;
+
     assert(pthread_mutex_unlock(&mutex_) == 0);
 
     return lock_protocol::OK;
@@ -187,7 +189,7 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
       map_retry.find(lid)->second.push_back(cid);
 
       // check if revoke rpc should be called or not
-      std::map<lock_protocol::lockid_t, std::pair<std::string, bool>>::iterator it_rev;
+      std::map<lock_protocol::lockid_t, std::pair<std::string, int>>::iterator it_rev;
       it_rev = map_revoke.find(lid);
       if(it_rev == map_revoke.end()) {
         map_revoke[lid] = make_pair(it->second, false);
@@ -220,7 +222,7 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
   map_lock[lid] = "";
 
   // remove from map_revoke
-  std::map<lock_protocol::lockid_t, std::pair<std::string, bool>>::iterator it_rev;
+  std::map<lock_protocol::lockid_t, std::pair<std::string, int>>::iterator it_rev;
   it_rev = map_revoke.find(lid);
   assert(it_rev != map_revoke.end());
   map_revoke.erase(it_rev);
@@ -233,4 +235,35 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
   cout << "lock_server_cache release exit" << endl;
 
   return lock_protocol::OK;
+}
+
+std::string lock_server_cache::marshal_state() {
+  pthread_mutex_lock(&mutex_);
+
+  marshall rep;
+
+  rep << map_lock;
+
+  rep << map_retry;
+
+  rep << map_revoke;
+
+  // unlock any mutexes
+  pthread_mutex_unlock(&mutex_);
+
+  return rep.str();
+}
+
+void lock_server_cache::unmarshal_state(std::string rep) {
+  pthread_mutex_lock(&mutex_);
+
+  unmarshall unm(rep);
+
+  unm >> map_lock;
+
+  unm >> map_retry;
+
+  unm >> map_revoke;
+
+  pthread_mutex_unlock(&mutex_);
 }

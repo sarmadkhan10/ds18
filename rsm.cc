@@ -152,11 +152,15 @@ rsm::recovery()
   assert(pthread_mutex_lock(&rsm_mutex)==0);
 
   while (1) {
+    inviewchange = true;
     while (!cfg->ismember(cfg->myaddr())) {
       cout << "recovery: calling join" << endl;
       if (join(primary)) {
+        myvs.vid = cfg->vid();
+        r = true;
 	printf("recovery: joined\n");
       } else {
+        r = false;
 	assert(pthread_mutex_unlock(&rsm_mutex)==0);
 	sleep (30); // XXX make another node in cfg primary?
 	assert(pthread_mutex_lock(&rsm_mutex)==0);
@@ -301,6 +305,7 @@ rsm::execute(int procno, std::string req)
 rsm_client_protocol::status
 rsm::client_invoke(int procno, std::string req, std::string &r)
 {
+  cout << "client_invoke called" << endl;
   pthread_mutex_lock(&invoke_mutex);
 
   int ret = rsm_protocol::OK;
@@ -312,8 +317,6 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
     pthread_mutex_unlock(&invoke_mutex);
     return rsm_client_protocol::NOTPRIMARY;
   }
-
-  myvs.seqno++;
 
   // call invoke on all replicas
   std::vector<std::string> cur_mems = cfg->get_curview();
@@ -345,6 +348,8 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
   // update vs
   last_myvs = myvs;
 
+  myvs.seqno++;
+
   pthread_mutex_unlock(&invoke_mutex);
   return ret;
 }
@@ -359,12 +364,16 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
 rsm_protocol::status
 rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
 {
+  cout << "invoke called" << endl;
   rsm_protocol::status ret = rsm_protocol::OK;
   // For lab 8
 
   if(insync) {
     return rsm_protocol::BUSY;
   }
+
+  cout << "lastmyvs.seqno: " << last_myvs.seqno << " vs.seqno: " << vs.seqno << endl;
+  cout << "lastmyvs.vid: " << myvs.vid << " vs.vid: " << vs.vid << endl;
 
   // check for gaps in seqno
   if(last_myvs.seqno+1 == vs.seqno) {
@@ -374,6 +383,8 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
 
     // ignoring rep for now?
     execute(proc, req);
+
+    last_myvs = vs;
   }
 
   return ret;
@@ -427,6 +438,7 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
     cout << "joinreq: invoking add" << endl;
     // Lab 7: invoke config to create a new view that contains m
     //assert (pthread_mutex_unlock(&rsm_mutex) == 0);
+    inviewchange = true;
     if(cfg->add(m)) {
       cout << "joinreq: add success" << endl;
       //log

@@ -9,7 +9,7 @@
 #include <vector>
 
 
-class lock_server_cache {
+class lock_server_cache : public rsm_state_transfer {
  private:
   class rsm *rsm;
  public:
@@ -20,10 +20,13 @@ class lock_server_cache {
   lock_protocol::status acquire(std::string cid, lock_protocol::lockid_t lid, int &r);
   lock_protocol::status release(std::string cid, lock_protocol::lockid_t lid, int &r);
 
+  std::string marshal_state();
+  void unmarshal_state(std::string);
+
  private:
 	std::map<lock_protocol::lockid_t, std::string> map_lock;
 	std::map<lock_protocol::lockid_t, std::vector<std::string>> map_retry;
-	std::map<lock_protocol::lockid_t, std::pair<std::string, bool>> map_revoke;
+	std::map<lock_protocol::lockid_t, std::pair<std::string, int>> map_revoke;
 	std::map<std::string, rpcc*> map_client;
 };
 
