@@ -167,6 +167,11 @@ rsm::recovery()
       }
     }
 
+    if(!amiprimary_wo()) {
+      sync_with_primary();
+      cout << "sync done: " << primary << endl;
+    }
+
     if (r) inviewchange = false;
     printf("recovery: go to sleep %d %d\n", insync, inviewchange);
     pthread_cond_wait(&recovery_cond, &rsm_mutex);
@@ -187,7 +192,8 @@ bool
 rsm::sync_with_primary()
 {
   // For lab 8
-  return true;
+  cout << "syncing with prim: " << primary << endl;
+  return statetransfer(primary);
 }
 
 
@@ -305,12 +311,15 @@ rsm::execute(int procno, std::string req)
 rsm_client_protocol::status
 rsm::client_invoke(int procno, std::string req, std::string &r)
 {
-  cout << "client_invoke called" << endl;
+  //cout << "client_invoke called" << endl;
   pthread_mutex_lock(&invoke_mutex);
 
   int ret = rsm_protocol::OK;
   // For lab 8
   int dummy;
+
+  if(inviewchange)
+    return rsm_client_protocol::BUSY;
 
   // if the node is not the primary, inform the client
   if(!amiprimary()) {
@@ -368,7 +377,7 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
   rsm_protocol::status ret = rsm_protocol::OK;
   // For lab 8
 
-  if(insync) {
+  if(insync || inviewchange) {
     return rsm_protocol::BUSY;
   }
 
