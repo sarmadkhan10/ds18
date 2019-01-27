@@ -52,6 +52,7 @@ rsm_client::invoke(int proc, std::string req, std::string &rep)
     printf("rsm_client::invoke proc %x primary %s ret %d\n", proc, 
      primary.id.c_str(), ret);
     if (ret == rsm_client_protocol::OK) {
+      std::cout << "rsm_client invole rep: " << rep << std::endl;
       break;
     }
     if (ret == rsm_client_protocol::BUSY) {

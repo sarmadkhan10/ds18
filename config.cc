@@ -305,19 +305,24 @@ config::heartbeater()
 paxos_protocol::status
 config::heartbeat(std::string m, unsigned vid, int &r)
 {
+  std::cout << "heartbeat: enter time: " << time(NULL) << std::endl;
   assert(pthread_mutex_lock(&cfg_mutex)==0);
   int ret = paxos_protocol::ERR;
   r = (int) myvid;
   printf("heartbeat from %s(%d) myvid %d\n", m.c_str(), vid, myvid);
   if (vid == myvid) {
+    std::cout << "heartbeat: enter exit1: " << time(NULL) << std::endl;
     ret = paxos_protocol::OK;
   } else if (pro->isrunning()) {
+    std::cout << "heartbeat: enter exit2: " << time(NULL) << std::endl;
     assert (vid == myvid + 1 || vid + 1 == myvid);
     ret = paxos_protocol::OK;
   } else {
+    std::cout << "heartbeat: enter exit3: " << time(NULL) << std::endl;
     ret = paxos_protocol::ERR;
   }
   assert(pthread_mutex_unlock(&cfg_mutex)==0);
+  std::cout << "heartbeat: enter exit4: " << time(NULL) << std::endl;
   return ret;
 }
 
@@ -330,6 +335,7 @@ config::doheartbeat(std::string m)
   heartbeat_t res = OK;
 
   printf("doheartbeater to %s (%d)\n", m.c_str(), vid);
+  std::cout << "time of heartbeat sent: " << time(NULL) << std::endl;
   handle h(m);
   if (h.get_rpcc()) {
     assert(pthread_mutex_unlock(&cfg_mutex)==0);

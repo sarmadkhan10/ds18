@@ -170,14 +170,17 @@ lock_client_cache::revoke(lock_protocol::lockid_t lid, int &r)
 lock_protocol::status 
 lock_client_cache::retry(lock_protocol::lockid_t lid, int &r)
 {
+  cout << "RETRY enter" << endl;
   std::vector<cached_lock>::iterator iter;
 
   assert(pthread_mutex_lock(&cache_mutex) == 0);
+  cout << "RETRY 1"<< endl;
 
   iter = find_lock(lid);
   assert(iter != cached_locks.end());
 
   assert(pthread_mutex_lock(&((*iter).lock_mutex)) == 0);
+  cout << "RETRY 2"<< endl;
 
   pthread_cond_broadcast(&((*iter).revoke_wait));
 
@@ -185,6 +188,7 @@ lock_client_cache::retry(lock_protocol::lockid_t lid, int &r)
 
   assert(pthread_mutex_unlock(&cache_mutex) == 0);
 
+  cout << "RETRY exit" << endl;
   return lock_protocol::OK;
 }
 /*
@@ -231,11 +235,15 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       // while holding lock_mutex. deadlock?
       assert(pthread_mutex_unlock(&cache_mutex) == 0);
 
+      cout << "temp1 lid:" << lid << endl;
       ret = rsm_c->call(lock_protocol::acquire, id, lid, r);
+      cout << "temp2 lid:" << lid << endl;
 
       while(ret == lock_protocol::RETRY) {
         //assuming the lock's mutex is released within the cond_wait
+        cout << "temp WILL RETRY LATER" << endl;
         pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
+        cout << "temp GOING TO RETRY NOW" << endl;
 
         ret = rsm_c->call(lock_protocol::acquire, id, lid, r);
 

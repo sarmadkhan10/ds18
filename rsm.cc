@@ -167,12 +167,15 @@ rsm::recovery()
       }
     }
 
-    if(!amiprimary_wo()) {
-      sync_with_primary();
-      cout << "sync done: " << primary << endl;
+    if (r) {
+      inviewchange = false;
+      r = false;
+
+      if(!amiprimary_wo()) {
+        sync_with_primary();
+      }
     }
 
-    if (r) inviewchange = false;
     printf("recovery: go to sleep %d %d\n", insync, inviewchange);
     pthread_cond_wait(&recovery_cond, &rsm_mutex);
     cout << "Recovery started by: " << cfg->myaddr() << endl;
@@ -193,7 +196,9 @@ rsm::sync_with_primary()
 {
   // For lab 8
   cout << "syncing with prim: " << primary << endl;
-  return statetransfer(primary);
+  bool ret = statetransfer(primary);
+  cout << "sync done: " << primary <<  " ret: " << ret << endl;
+  return ret;
 }
 
 
@@ -270,7 +275,7 @@ rsm::join(std::string m) {
 void 
 rsm::commit_change() 
 {
-  //pthread_mutex_lock(&rsm_mutex);
+  pthread_mutex_lock(&rsm_mutex);
   // Lab 7:
   // - If I am not part of the new view, start recovery
   cout << "rsm commit change" << endl;
@@ -280,9 +285,11 @@ rsm::commit_change()
   else {
     set_primary();
     inviewchange = false;
+    if(!amiprimary_wo())
+      sync_with_primary();
   }
   myvs.vid = cfg->vid();
-  //pthread_mutex_unlock(&rsm_mutex);
+  pthread_mutex_unlock(&rsm_mutex);
 }
 
 
@@ -311,7 +318,7 @@ rsm::execute(int procno, std::string req)
 rsm_client_protocol::status
 rsm::client_invoke(int procno, std::string req, std::string &r)
 {
-  //cout << "client_invoke called" << endl;
+  cout << "client_invoke enter" << endl;
   pthread_mutex_lock(&invoke_mutex);
 
   int ret = rsm_protocol::OK;
@@ -327,7 +334,7 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
     return rsm_client_protocol::NOTPRIMARY;
   }
 
-  // call invoke on all replicas
+  // call invoke on all replicas. rsm_mutex?
   std::vector<std::string> cur_mems = cfg->get_curview();
 
   std::vector<std::string>::iterator it;
@@ -339,26 +346,27 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
     handle h(*it);
 
     if(h.get_rpcc() != NULL) {
-      int ret_val = h.get_rpcc()->call(rsm_protocol::invoke, procno, myvs, req, dummy, rpcc::to(1000));
+      int ret_val = h.get_rpcc()->call(rsm_protocol::invoke, procno, myvs, req, dummy, rpcc::to(3000));
 
       // assuming only timeout failure?
       if(ret_val != rsm_protocol::OK) {
         pthread_mutex_unlock(&invoke_mutex);
+        cout << "client_invoke replica returned error. ret: " << ret_val << " cid: " << *it << " seqno: " << myvs.seqno << endl;
         return rsm_client_protocol::BUSY;
       }
     }
   }
 
+  pthread_mutex_lock(&rsm_mutex);
   // all replicas replied OK, exec locally
-  unmarshall rep(execute(procno, req));
-
-  rep >> ret;
+  r = execute(procno, req);
 
   // update vs
   last_myvs = myvs;
 
   myvs.seqno++;
 
+  pthread_mutex_unlock(&rsm_mutex);
   pthread_mutex_unlock(&invoke_mutex);
   return ret;
 }
@@ -388,7 +396,10 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
   if(last_myvs.seqno+1 == vs.seqno) {
     assert(myvs.vid == vs.vid);
 
-    cout << "here1" << endl;
+    cout << "rsm_mutex before ac" << endl;
+    assert(pthread_mutex_lock(&rsm_mutex)==0);
+    assert(pthread_mutex_unlock(&rsm_mutex)==0);
+    cout << "rsm_mutex after ac" << endl;
 
     // ignoring rep for now?
     execute(proc, req);
@@ -446,14 +457,14 @@ rsm::joinreq(std::string m, viewstamp last, rsm_protocol::joinres &r)
   } else {
     cout << "joinreq: invoking add" << endl;
     // Lab 7: invoke config to create a new view that contains m
-    //assert (pthread_mutex_unlock(&rsm_mutex) == 0);
+    assert (pthread_mutex_unlock(&rsm_mutex) == 0);
     inviewchange = true;
     if(cfg->add(m)) {
       cout << "joinreq: add success" << endl;
       //log
       r.log = cfg->dump();
     }
-    //assert (pthread_mutex_lock(&rsm_mutex) == 0);
+    assert (pthread_mutex_lock(&rsm_mutex) == 0);
     cout << "joinreq: add success1" << endl;
   }
   assert (pthread_mutex_unlock(&rsm_mutex) == 0);
@@ -525,7 +536,9 @@ rsm::amiprimary_wo()
 bool
 rsm::amiprimary()
 {
+  cout << "ami1" << endl;
   assert(pthread_mutex_lock(&rsm_mutex)==0);
+  cout << "ami2" << endl;
   bool r = amiprimary_wo();
   assert(pthread_mutex_unlock(&rsm_mutex)==0);
   return r;

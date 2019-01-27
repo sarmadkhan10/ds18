@@ -36,6 +36,8 @@ lock_server_cache::lock_server_cache(class rsm *_rsm)
   assert(pthread_cond_init(&cond_retry, NULL) == 0);
   assert(pthread_cond_init(&cond_revoke, NULL) == 0);
 
+  rsm->set_state_transfer(this);
+
   pthread_t th;
   int r = pthread_create(&th, NULL, &revokethread, (void *) this);
   assert (r == 0);
@@ -67,10 +69,21 @@ lock_server_cache::revoker()
 
         //pthread_mutex_unlock(&mutex_);
 
-        assert(map_client.find(rev_cid) != map_client.end());
+        /*if(map_client.find(rev_cid) == map_client.end()) {
+          sockaddr_in dstsock;
+          make_sockaddr(rev_cid.c_str(), &dstsock);
+          rpcc *cl = new rpcc(dstsock);
+          if (cl->bind() < 0) {
+            printf("lock_server_cache: call bind failed\n");
+          }
+
+          map_client[rev_cid] = cl;
+        }*/
 
         // lab8
+        cout << "revoker: amip" << endl;
         if(rsm->amiprimary()) {
+          assert(map_client.find(rev_cid) != map_client.end());
           rpcc *cl = map_client[rev_cid];
 
           int r;
@@ -84,7 +97,9 @@ lock_server_cache::revoker()
       }
     }
 
+    cout << "revoker: going to sleep" << endl;
     pthread_cond_wait(&cond_revoke, &mutex_);
+    cout << "revoker: wakes up" << endl;
   }
 }
 
@@ -101,7 +116,9 @@ lock_server_cache::retryer()
 
   while(1) {
     while(map_retry.empty()) {
+      cout << "retryer: going to sleep" << endl;
       pthread_cond_wait(&cond_retry, &mutex_);
+      cout << "retryer: wakes up" << endl;
     }
 
     //assert(!map_retry.empty());
@@ -115,8 +132,9 @@ lock_server_cache::retryer()
     map_retry.erase(it);
 
     // lab8
+    cout << "retryer: amip" << endl;
     if(rsm->amiprimary()) {
-      pthread_mutex_unlock(&mutex_);
+      //pthread_mutex_unlock(&mutex_);
 
       for(vector<string>::iterator it = retry_cid_list.begin(); it!=retry_cid_list.end(); it++) {
         assert(map_client.find(*it) != map_client.end());
@@ -124,9 +142,10 @@ lock_server_cache::retryer()
 
         int r;
         assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
+        cout << "retry exit" << endl;
       }
 
-      pthread_mutex_lock(&mutex_);
+      //pthread_mutex_lock(&mutex_);
    }
   }
 }
@@ -137,6 +156,7 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
 {
   cout << "lock_server_cache acquire enter" << endl;
   assert(pthread_mutex_lock(&mutex_) == 0);
+  cout << "lock_server_cache acquire mutex acquired" << endl;
 
   // add the client to map if seen for the first time
   if(map_client.find(cid) == map_client.end()) {
@@ -199,6 +219,7 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
 
       assert(pthread_mutex_unlock(&mutex_) == 0);
 
+      cout << "acquire: should retry later" << endl;
       return lock_protocol::RETRY;
     }
   }
@@ -216,7 +237,7 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
       releaser_holds = true;
     }
   }
-  if(!releaser_holds) return lock_protocol::RPCERR;
+  if(!releaser_holds) assert("releaser doesn't hold the lock");
 
   // remove client id
   map_lock[lid] = "";
@@ -238,7 +259,9 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
 }
 
 std::string lock_server_cache::marshal_state() {
-  pthread_mutex_lock(&mutex_);
+  cout << "marshal_state enter. time: " << time(NULL) << endl;
+  //pthread_mutex_lock(&mutex_);
+  cout << "marshal_state locked. time: " << time(NULL) << endl;
 
   marshall rep;
 
@@ -249,13 +272,15 @@ std::string lock_server_cache::marshal_state() {
   rep << map_revoke;
 
   // unlock any mutexes
-  pthread_mutex_unlock(&mutex_);
+  //pthread_mutex_unlock(&mutex_);
 
   return rep.str();
 }
 
 void lock_server_cache::unmarshal_state(std::string rep) {
-  pthread_mutex_lock(&mutex_);
+  cout << "unmarshal_state enter. time: " << time(NULL) << endl;
+  //pthread_mutex_lock(&mutex_);
+  cout << "unmarshal_state locked. time: " << time(NULL) << endl;
 
   unmarshall unm(rep);
 
@@ -265,5 +290,5 @@ void lock_server_cache::unmarshal_state(std::string rep) {
 
   unm >> map_revoke;
 
-  pthread_mutex_unlock(&mutex_);
+  //pthread_mutex_unlock(&mutex_);
 }
