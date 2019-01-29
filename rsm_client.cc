@@ -32,6 +32,40 @@ void
 rsm_client::primary_failure()
 {
   // For lab 8
+  int ret = rsm_client_protocol::ERR;
+  std::vector<std::string> old_list = known_mems;
+
+  while(ret != rsm_client_protocol::OK) {
+    std::string next_replica = old_list.back();
+    old_list.pop_back();
+
+    sockaddr_in dstsock;
+    make_sockaddr(next_replica.c_str(), &dstsock);
+    rpcc *cl = new rpcc(dstsock);
+
+    if (cl->bind(rpcc::to(1000)) < 0) continue;
+
+    ret = cl->call(rsm_client_protocol::members, 0, known_mems, 
+          rpcc::to(1000));
+  }
+
+  std::string new_primary = known_mems.back();
+  known_mems.pop_back();
+
+  if (new_primary != primary.id) {
+    sockaddr_in dstsock;
+    make_sockaddr(new_primary.c_str(), &dstsock);
+    primary.id = new_primary;
+    if (primary.cl) {
+      assert(primary.nref == 0);  // XXX fix: delete cl only when refcnt=0
+      delete primary.cl; 
+    }
+    primary.cl = new rpcc(dstsock);
+
+    if (primary.cl->bind(rpcc::to(1000)) < 0) {
+      assert("rsm_client::rsm_client cannot bind to primary\n");
+    }
+  }
 }
 
 rsm_protocol::status

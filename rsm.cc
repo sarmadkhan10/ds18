@@ -107,6 +107,8 @@ rsm::rsm(std::string _first, std::string _me)
   myvs = last_myvs;
   myvs.seqno = 1;
 
+  primary_changed = false;
+
   pthread_mutex_init(&rsm_mutex, NULL);
   pthread_mutex_init(&invoke_mutex, NULL);
   pthread_cond_init(&recovery_cond, NULL);
@@ -187,6 +189,43 @@ bool
 rsm::sync_with_backups()
 {
   // For lab 8
+  int min_seqno = last_myvs.seqno;
+  std::string rep_id = "";
+
+  std::vector<std::string> cur_mems = cfg->get_curview();
+
+  std::vector<std::string>::iterator it;
+  for(it = cur_mems.begin(); it != cur_mems.end(); it++) {
+
+    if(*it == cfg->myaddr())
+      continue;
+
+    handle h(*it);
+
+    int r = 0;
+
+    if(h.get_rpcc() != NULL) {
+      int ret_val = h.get_rpcc()->call(rsm_protocol::transferdonereq, r, rpcc::to(3000));
+
+      // assuming only timeout failure?
+      if(ret_val != rsm_protocol::OK) {
+        assert("replica didn't reply to transferdonereq");
+      }
+
+      if(r < min_seqno) {
+        min_seqno = r;
+        rep_id = *it;
+      }
+    }
+  }
+
+  // check if I have the least seqno
+  if(min_seqno < last_myvs.seqno) {
+    statetransfer(rep_id);
+  }
+
+  statetransferdone("");
+
   return true;
 }
 
@@ -286,7 +325,10 @@ rsm::commit_change()
     set_primary();
     inviewchange = false;
     if(!amiprimary_wo())
-      sync_with_primary();
+      if(!primary_changed)
+        sync_with_primary();
+      else
+        insync = true;
   }
   myvs.vid = cfg->vid();
   pthread_mutex_unlock(&rsm_mutex);
@@ -505,6 +547,8 @@ rsm::set_primary()
     return;
   }
 
+  primary_changed = true;
+
   assert(p.size() > 0);
   std::vector<unsigned long long> memsi;
   for (unsigned i = 0; i < p.size(); i++) {
@@ -520,6 +564,11 @@ rsm::set_primary()
     if (isamember(sst.str(), c)) {
       primary = sst.str();
       printf("set_primary: primary is %s\n", primary.c_str());
+
+      // if I am the new primary, sync with backups
+      if(primary == cfg->myaddr()) {
+        sync_with_backups();
+      }
       return;
     }
   }
