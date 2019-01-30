@@ -224,7 +224,26 @@ rsm::sync_with_backups()
     statetransfer(rep_id);
   }
 
-  statetransferdone("");
+  //statetransferdone("");
+
+  // inform replicas primary has synced
+  for(it = cur_mems.begin(); it != cur_mems.end(); it++) {
+
+    if(*it == cfg->myaddr())
+      continue;
+
+    handle h(*it);
+
+    int r = last_myvs.seqno;
+
+    if(h.get_rpcc() != NULL) {
+      int ret_val = h.get_rpcc()->call(rsm_protocol::transferdonereq, r, rpcc::to(3000));
+
+      // assuming only timeout failure?
+      if(ret_val != rsm_protocol::OK)
+        assert("replica didn't reply to transferdonereq");
+    }
+  }
 
   return true;
 }
@@ -438,15 +457,14 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
   if(last_myvs.seqno+1 == vs.seqno) {
     assert(myvs.vid == vs.vid);
 
-    cout << "rsm_mutex before ac" << endl;
     assert(pthread_mutex_lock(&rsm_mutex)==0);
-    assert(pthread_mutex_unlock(&rsm_mutex)==0);
-    cout << "rsm_mutex after ac" << endl;
 
     // ignoring rep for now?
     execute(proc, req);
 
     last_myvs = vs;
+
+    assert(pthread_mutex_unlock(&rsm_mutex)==0);
   }
 
   return ret;
@@ -478,6 +496,16 @@ rsm::transferdonereq(std::string m, int &r)
   int ret = rsm_client_protocol::OK;
   assert (pthread_mutex_lock(&rsm_mutex) == 0);
   // For lab 8
+  // the primary is requesting for the seqno
+  if(r == 0) {
+    r = last_myvs.seqno;
+    return rsm_protocol::OK;
+  }
+  else {
+    sync_with_primary();
+    insync = false;
+  }
+
   assert (pthread_mutex_unlock(&rsm_mutex) == 0);
   return ret;
 }
