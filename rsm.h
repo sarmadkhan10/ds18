@@ -34,9 +34,6 @@ class rsm : public config_view_change {
   bool break1;
   bool break2;
 
-  //
-  bool primary_changed;
-
 
   rsm_client_protocol::status client_members(int i, 
 					     std::vector<std::string> &r);

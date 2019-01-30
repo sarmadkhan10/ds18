@@ -107,8 +107,6 @@ rsm::rsm(std::string _first, std::string _me)
   myvs = last_myvs;
   myvs.seqno = 1;
 
-  primary_changed = false;
-
   pthread_mutex_init(&rsm_mutex, NULL);
   pthread_mutex_init(&invoke_mutex, NULL);
   pthread_cond_init(&recovery_cond, NULL);
@@ -189,6 +187,7 @@ bool
 rsm::sync_with_backups()
 {
   // For lab 8
+  cout << "sync_with_backups()" << endl;
   int min_seqno = last_myvs.seqno;
   std::string rep_id = "";
 
@@ -196,6 +195,7 @@ rsm::sync_with_backups()
 
   std::vector<std::string>::iterator it;
   for(it = cur_mems.begin(); it != cur_mems.end(); it++) {
+    cout << "in loop" << endl;
 
     if(*it == cfg->myaddr())
       continue;
@@ -205,45 +205,26 @@ rsm::sync_with_backups()
     int r = 0;
 
     if(h.get_rpcc() != NULL) {
-      int ret_val = h.get_rpcc()->call(rsm_protocol::transferdonereq, r, rpcc::to(3000));
+      // keep trying until the replica is in sync
+      while(1) {
+        int ret_val = h.get_rpcc()->call(rsm_protocol::transferdonereq, cfg->myaddr(), r, rpcc::to(3000));
 
-      // assuming only timeout failure?
-      if(ret_val != rsm_protocol::OK) {
-        assert("replica didn't reply to transferdonereq");
-      }
-
-      if(r < min_seqno) {
-        min_seqno = r;
-        rep_id = *it;
+        // assuming only timeout failure?
+        if(ret_val != rsm_protocol::OK)
+          assert("replica didn't reply to transferdonereq");
+        else {
+          // check if in sync
+          if(r == last_myvs.seqno)
+            break;
+          else
+            sleep(100);
+        }
       }
     }
   }
 
-  // check if I have the least seqno
-  if(min_seqno < last_myvs.seqno) {
-    statetransfer(rep_id);
-  }
-
-  //statetransferdone("");
-
-  // inform replicas primary has synced
-  for(it = cur_mems.begin(); it != cur_mems.end(); it++) {
-
-    if(*it == cfg->myaddr())
-      continue;
-
-    handle h(*it);
-
-    int r = last_myvs.seqno;
-
-    if(h.get_rpcc() != NULL) {
-      int ret_val = h.get_rpcc()->call(rsm_protocol::transferdonereq, r, rpcc::to(3000));
-
-      // assuming only timeout failure?
-      if(ret_val != rsm_protocol::OK)
-        assert("replica didn't reply to transferdonereq");
-    }
-  }
+  cout << "sync_with_backups:: return true" << endl;
+  insync = false;
 
   return true;
 }
@@ -344,7 +325,6 @@ rsm::commit_change()
     set_primary();
     inviewchange = false;
     if(!amiprimary_wo())
-      if(!primary_changed)
         sync_with_primary();
       else
         insync = true;
@@ -493,18 +473,13 @@ rsm::transferreq(std::string src, viewstamp last, rsm_protocol::transferres &r)
 rsm_protocol::status
 rsm::transferdonereq(std::string m, int &r)
 {
+  cout << "transferdonereq(): " << r << endl;
   int ret = rsm_client_protocol::OK;
   assert (pthread_mutex_lock(&rsm_mutex) == 0);
   // For lab 8
   // the primary is requesting for the seqno
-  if(r == 0) {
-    r = last_myvs.seqno;
-    return rsm_protocol::OK;
-  }
-  else {
-    sync_with_primary();
-    insync = false;
-  }
+  r = last_myvs.seqno;
+  cout << "transferdonereq:: sending my seqno: " << last_myvs.seqno << endl;
 
   assert (pthread_mutex_unlock(&rsm_mutex) == 0);
   return ret;
@@ -574,8 +549,6 @@ rsm::set_primary()
     printf("set_primary: primary stays %s\n", primary.c_str());
     return;
   }
-
-  primary_changed = true;
 
   assert(p.size() > 0);
   std::vector<unsigned long long> memsi;
