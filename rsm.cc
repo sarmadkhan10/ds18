@@ -326,8 +326,10 @@ rsm::commit_change()
     inviewchange = false;
     if(!amiprimary_wo())
         sync_with_primary();
-      else
-        insync = true;
+    else {
+      insync = true;
+      sync_with_backups();
+    }
   }
   myvs.vid = cfg->vid();
   pthread_mutex_unlock(&rsm_mutex);
@@ -395,6 +397,8 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
         cout << "client_invoke replica returned error. ret: " << ret_val << " cid: " << *it << " seqno: " << myvs.seqno << endl;
         return rsm_client_protocol::BUSY;
       }
+
+      breakpoint1();
     }
   }
 
@@ -565,11 +569,6 @@ rsm::set_primary()
     if (isamember(sst.str(), c)) {
       primary = sst.str();
       printf("set_primary: primary is %s\n", primary.c_str());
-
-      // if I am the new primary, sync with backups
-      if(primary == cfg->myaddr()) {
-        sync_with_backups();
-      }
       return;
     }
   }

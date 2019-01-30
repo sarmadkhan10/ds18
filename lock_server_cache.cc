@@ -158,6 +158,15 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
   assert(pthread_mutex_lock(&mutex_) == 0);
   cout << "lock_server_cache acquire mutex acquired" << endl;
 
+  map<lock_protocol::lockid_t, string>::iterator it;
+  it = map_lock.find(lid);
+
+  // lab8
+  if(it->second == cid) {
+    assert(pthread_mutex_unlock(&mutex_) == 0);
+    assert("dup acquire");
+  }
+
   // add the client to map if seen for the first time
   if(map_client.find(cid) == map_client.end()) {
     cout << "adding client: " << cid << endl;
@@ -170,8 +179,6 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
 
     map_client[cid] = cl;
   }
-
-  map<lock_protocol::lockid_t, string>::iterator it;
 
   it = map_lock.find(lid);
 
