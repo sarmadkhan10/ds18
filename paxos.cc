@@ -246,12 +246,16 @@ proposer::decide(unsigned instance, std::vector<std::string> accepts,
 {
   stable = true;
 
-  acc->commit(instance, v);
+  //acc->commit(instance, v);
   std::cout << "COMMIT RETURNS \n " ;
 
   std::vector<std::string>::iterator it;
 
   for(it = accepts.begin(); it != accepts.end(); it++) {
+    // ensure order. hackish
+    if(*it == me) {
+      continue;
+    }
     // preparereq rpc to every node
     paxos_protocol::decidearg dec_a;
     int r;
@@ -263,9 +267,12 @@ proposer::decide(unsigned instance, std::vector<std::string> accepts,
 
     if(h.get_rpcc() != NULL) {
       // check ret val?
-      h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(1000));
+      int ret_val = h.get_rpcc()->call(paxos_protocol::decidereq, me, dec_a, r, rpcc::to(1000));
+      cout << "decidereq ret: " << ret_val << " vid: " << instance << " to: " << *it << endl;
     }
   }
+
+  acc->commit(instance, v);
 
 }
 
@@ -355,13 +362,16 @@ acceptor::acceptreq(std::string src, paxos_protocol::acceptarg a, int &r)
 paxos_protocol::status
 acceptor::decidereq(std::string src, paxos_protocol::decidearg a, int &r)
 {
+  cout << "decidereq: rpc received" << endl;
 
   // handle an decide message from proposer
 
   if(a.instance <= instance_h) {
     // actual ignore
+    cout << "decidereq: ignoring" << endl;
   } else {
     commit(a.instance, a.v);
+    cout << "decidereq ret: " << a.instance << " " << a.v << endl;
   }
 
   return paxos_protocol::OK;

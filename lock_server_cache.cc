@@ -143,7 +143,7 @@ lock_server_cache::retryer()
         rpcc *cl = map_client[*it];
 
         int r;
-        assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
+        //assert(cl->call(rlock_protocol::retry, retry_lid, r) == lock_protocol::OK);
         cout << "retry exit" << endl;
       }
 
@@ -222,9 +222,10 @@ lock_protocol::status lock_server_cache::acquire(string cid, lock_protocol::lock
       it_rev = map_revoke.find(lid);
       if(it_rev == map_revoke.end()) {
         map_revoke[lid] = make_pair(it->second, false);
-
-        pthread_cond_signal(&cond_revoke);
       }
+
+      // lab8
+      pthread_cond_signal(&cond_revoke);
 
       assert(pthread_mutex_unlock(&mutex_) == 0);
 

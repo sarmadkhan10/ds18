@@ -154,7 +154,9 @@ rsm::recovery()
   while (1) {
     inviewchange = true;
       if(!amiprimary_wo()) {
+        insync = true;
         sync_with_primary();
+        insync = false;
       }
     while (!cfg->ismember(cfg->myaddr())) {
       cout << "recovery: calling join" << endl;
@@ -175,7 +177,9 @@ rsm::recovery()
       r = false;
 
       if(!amiprimary_wo()) {
+        insync = true;
         sync_with_primary();
+        insync = false;
       }
     }
 
@@ -210,17 +214,24 @@ rsm::sync_with_backups()
     if(h.get_rpcc() != NULL) {
       // keep trying until the replica is in sync
       while(1) {
+        cout << "doing transferdonereq: " << *it << endl;
         int ret_val = h.get_rpcc()->call(rsm_protocol::transferdonereq, cfg->myaddr(), r, rpcc::to(3000));
 
         // assuming only timeout failure?
-        if(ret_val != rsm_protocol::OK)
-          assert("replica didn't reply to transferdonereq");
+        if(ret_val != rsm_protocol::OK) {
+          cout << "replica didn't reply to transferdonereq" << endl;
+          assert(0);
+        }
         else {
           // check if in sync
-          if(r == last_myvs.seqno)
+          if(r == last_myvs.seqno) {
+            cout << "breakkkkk;" << endl;
             break;
-          else
+          }
+          else {
+            cout << "sleeeeping" << endl;
             sleep(100);
+          }
         }
       }
     }
@@ -327,8 +338,11 @@ rsm::commit_change()
   else {
     set_primary();
     inviewchange = false;
-    if(!amiprimary_wo())
-        sync_with_primary();
+    if(!amiprimary_wo()) {
+      insync = true;
+      sync_with_primary();
+      insync = false;
+    }
     else {
       insync = true;
       sync_with_backups();
@@ -366,13 +380,17 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
 {
   cout << "client_invoke enter" << endl;
   pthread_mutex_lock(&invoke_mutex);
+  cout << "client_invoke got mutex" << endl;
 
   int ret = rsm_protocol::OK;
   // For lab 8
   int dummy;
 
-  if(inviewchange)
+  if(inviewchange){
+    cout << "client_invoke: inviewchange" << endl;
+    pthread_mutex_unlock(&invoke_mutex);
     return rsm_client_protocol::BUSY;
+  }
 
   // if the node is not the primary, inform the client
   if(!amiprimary()) {
@@ -392,7 +410,10 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
     handle h(*it);
 
     if(h.get_rpcc() != NULL) {
+      cout << "client_invoke: doing invoke: " << *it << endl;
       int ret_val = h.get_rpcc()->call(rsm_protocol::invoke, procno, myvs, req, dummy, rpcc::to(3000));
+
+      cout << "client_invoke: invoke: " << *it << " ret: " << ret_val << endl;
 
       // assuming only timeout failure?
       if(ret_val != rsm_protocol::OK) {
@@ -405,7 +426,7 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
     }
   }
 
-  pthread_mutex_lock(&rsm_mutex);
+  //pthread_mutex_lock(&rsm_mutex);
   // all replicas replied OK, exec locally
   cout << "sequence number before execute" << myvs.seqno << "last_myvs.seqno" << last_myvs.seqno <<endl;
   r = execute(procno, req);
@@ -416,7 +437,7 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
 
   myvs.seqno++;
 
-  pthread_mutex_unlock(&rsm_mutex);
+  //pthread_mutex_unlock(&rsm_mutex);
   pthread_mutex_unlock(&invoke_mutex);
   cout << "exection done by prim \n " ;
   return ret;
@@ -455,6 +476,9 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
     last_myvs = vs;
     myvs = last_myvs;
     myvs.seqno++;
+
+    breakpoint1();
+
     assert(pthread_mutex_unlock(&rsm_mutex)==0);
   }
 
@@ -467,6 +491,7 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
 rsm_protocol::status
 rsm::transferreq(std::string src, viewstamp last, rsm_protocol::transferres &r)
 {
+  cout << "transferreq enter" << endl;
   assert(pthread_mutex_lock(&rsm_mutex)==0);
   int ret = rsm_protocol::OK;
   printf("transferreq from %s (%d,%d) vs (%d,%d)\n", src.c_str(), 
