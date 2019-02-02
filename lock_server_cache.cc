@@ -83,10 +83,10 @@ lock_server_cache::revoker()
         // lab8
         cout << "revoker: amip" << endl;
         if(rsm->amiprimary()) {
-          assert(map_client.find(rev_cid) != ap_client.end());
+          assert(map_client.find(rev_cid) != map_client.end());
           rpcc *cl = map_client[rev_cid];
 
-          in r;
+          int r;
           int ret = cl->call(rlock_protocol::revoke, rev_lid, r);
           assert (ret == lock_protocol::OK);
 
@@ -246,7 +246,12 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
       releaser_holds = true;
     }
   }
-  if(!releaser_holds) return lock_protocol::OK;
+  if(!releaser_holds) {
+    cout << "duplicate RELEASE" << endl;
+    pthread_cond_signal(&cond_retry);
+    pthread_mutex_unlock(&mutex_);
+    return lock_protocol::OK;
+  }
 
 
   cout << "the client releasing: " << cid << "client holding the lock: " << map_lock[lid] << endl;

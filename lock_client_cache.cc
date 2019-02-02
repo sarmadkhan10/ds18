@@ -210,6 +210,13 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
   cout << "lock_client_cache acquire enter. lid: " << lid <<  " cid: " << id << endl;
   lock_protocol::status ret; 
   int r;
+  struct timespec timeToWait;
+  struct timeval now;
+ 
+
+
+
+    
   
   while(1) {
     assert(pthread_mutex_lock(&cache_mutex) == 0);
@@ -242,7 +249,13 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid)
       while(ret == lock_protocol::RETRY) {
         //assuming the lock's mutex is released within the cond_wait
         cout << "temp WILL RETRY LATER" << endl;
-        pthread_cond_wait(&((*iter).revoke_wait), &((*iter).lock_mutex));
+        
+        gettimeofday(&now,NULL);
+
+
+        timeToWait.tv_sec = now.tv_sec+3;
+        timeToWait.tv_nsec = 0;
+        pthread_cond_timedwait(&((*iter).revoke_wait), &((*iter).lock_mutex), &timeToWait);
         cout << "temp GOING TO RETRY NOW" << endl;
 
         ret = rsm_c->call(lock_protocol::acquire, id, lid, r);
