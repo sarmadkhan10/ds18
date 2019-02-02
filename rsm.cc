@@ -153,6 +153,9 @@ rsm::recovery()
 
   while (1) {
     inviewchange = true;
+      if(!amiprimary_wo()) {
+        sync_with_primary();
+      }
     while (!cfg->ismember(cfg->myaddr())) {
       cout << "recovery: calling join" << endl;
       if (join(primary)) {
@@ -404,8 +407,10 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
 
   pthread_mutex_lock(&rsm_mutex);
   // all replicas replied OK, exec locally
+  cout << "sequence number before execute" << myvs.seqno << "last_myvs.seqno" << last_myvs.seqno <<endl;
   r = execute(procno, req);
 
+  
   // update vs
   last_myvs = myvs;
 
@@ -413,6 +418,7 @@ rsm::client_invoke(int procno, std::string req, std::string &r)
 
   pthread_mutex_unlock(&rsm_mutex);
   pthread_mutex_unlock(&invoke_mutex);
+  cout << "exection done by prim \n " ;
   return ret;
 }
 
@@ -447,7 +453,8 @@ rsm::invoke(int proc, viewstamp vs, std::string req, int &dummy)
     execute(proc, req);
 
     last_myvs = vs;
-
+    myvs = last_myvs;
+    myvs.seqno++;
     assert(pthread_mutex_unlock(&rsm_mutex)==0);
   }
 

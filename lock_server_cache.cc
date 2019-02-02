@@ -83,10 +83,10 @@ lock_server_cache::revoker()
         // lab8
         cout << "revoker: amip" << endl;
         if(rsm->amiprimary()) {
-          assert(map_client.find(rev_cid) != map_client.end());
+          assert(map_client.find(rev_cid) != ap_client.end());
           rpcc *cl = map_client[rev_cid];
 
-          int r;
+          in r;
           int ret = cl->call(rlock_protocol::revoke, rev_lid, r);
           assert (ret == lock_protocol::OK);
 
@@ -135,8 +135,10 @@ lock_server_cache::retryer()
     cout << "retryer: amip" << endl;
     if(rsm->amiprimary()) {
       //pthread_mutex_unlock(&mutex_);
+	    std:: cout << "retry:: i am prim\n";
 
       for(vector<string>::iterator it = retry_cid_list.begin(); it!=retry_cid_list.end(); it++) {
+	      std::cout << "IN RETRY LIST \n" ;
         assert(map_client.find(*it) != map_client.end());
         rpcc *cl = map_client[*it];
 
@@ -244,15 +246,19 @@ lock_protocol::status lock_server_cache::release(string cid, lock_protocol::lock
       releaser_holds = true;
     }
   }
-  if(!releaser_holds) assert("releaser doesn't hold the lock");
+  if(!releaser_holds) return lock_protocol::OK;
 
+
+  cout << "the client releasing: " << cid << "client holding the lock: " << map_lock[lid] << endl;
   // remove client id
   map_lock[lid] = "";
 
   // remove from map_revoke
   std::map<lock_protocol::lockid_t, std::pair<std::string, int>>::iterator it_rev;
   it_rev = map_revoke.find(lid);
+
   assert(it_rev != map_revoke.end());
+
   map_revoke.erase(it_rev);
 
   pthread_cond_signal(&cond_retry);

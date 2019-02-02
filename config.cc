@@ -148,7 +148,9 @@ config::paxos_commit(unsigned instance, std::string value)
   if (vc) {
     assert(pthread_mutex_unlock(&cfg_mutex)==0);
     vc->commit_change();
+	std::cout << "PXS MUTEX XQO \n";
     assert(pthread_mutex_lock(&cfg_mutex)==0);
+	std::cout << "PXS MUTEX XQk \n";
   }
   assert(pthread_mutex_unlock(&cfg_mutex)==0);
 }
@@ -204,7 +206,9 @@ config::add(std::string new_m)
   std::string v = value(m);
   assert(pthread_mutex_unlock(&cfg_mutex)==0);
   bool r = pro->run(myvid+1, mems, v);
+  std::cout << "xxx \n" ;
   assert(pthread_mutex_lock(&cfg_mutex)==0);
+  std::cout << "yyy \n" ;
   if (r) {
     printf("config::add: proposer returned success\n");
   } else {

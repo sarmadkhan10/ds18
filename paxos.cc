@@ -136,7 +136,9 @@ proposer::run(int instance, std::vector<std::string> c_nodes, std::string c_v)
 
         breakpoint2();
 
+	std::cout << "DECIDE calling\n";
         decide(instance, accepts, v);
+	std::cout << "DECIDE RETURNED \n";
         r = true;
       } else {
         printf("paxos::manager: no majority of accept responses\n");
@@ -194,6 +196,7 @@ proposer::prepare(unsigned instance, std::vector<std::string> &accepts,
           stable = true;
 
           cout << "acc commit" << endl;
+	  cout << "instance: " << prep_r.oldinstance << "view : " << prep_r.v_a << endl;
           acc->commit(prep_r.oldinstance, prep_r.v_a);
         }
         // reject?
@@ -244,6 +247,7 @@ proposer::decide(unsigned instance, std::vector<std::string> accepts,
   stable = true;
 
   acc->commit(instance, v);
+  std::cout << "COMMIT RETURNS \n " ;
 
   std::vector<std::string>::iterator it;
 
@@ -381,7 +385,10 @@ acceptor::commit_wo(unsigned instance, std::string value)
     if (cfg) {
       pthread_mutex_unlock(&pxs_mutex);
       cfg->paxos_commit(instance, value);
+	std::cout << "PXS MUTEX Xq \n";
       pthread_mutex_lock(&pxs_mutex);
+	std::cout << "PXS MUTEX Xp \n";
+
     }
   }
 }
@@ -389,7 +396,9 @@ acceptor::commit_wo(unsigned instance, std::string value)
 void
 acceptor::commit(unsigned instance, std::string value)
 {
+	std::cout << "PXS MUTEX X \n";
   pthread_mutex_lock(&pxs_mutex);
+	std::cout << "PXS MUTEX y \n";
   commit_wo(instance, value);
   pthread_mutex_unlock(&pxs_mutex);
 }
