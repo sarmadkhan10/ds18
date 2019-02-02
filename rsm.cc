@@ -229,8 +229,8 @@ rsm::sync_with_backups()
             break;
           }
           else {
-            cout << "sleeeeping" << endl;
-            sleep(100);
+            //sleep(100);
+            break;
           }
         }
       }
